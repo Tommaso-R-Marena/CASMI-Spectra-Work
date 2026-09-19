@@ -1,0 +1,1 @@
+"""Quotient Fragmentation Dynamics core."""
