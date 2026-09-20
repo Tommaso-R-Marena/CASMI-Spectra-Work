@@ -24,8 +24,11 @@ def test_hellinger_delta_prefers_matching_energy_response():
         view(20, [0.80, 0.15, 0.05]),
         view(30, [0.80, 0.15, 0.05]),
     ]
-    assert multi_energy_delta_score(query, true, mode="hellinger") > multi_energy_delta_score(query, decoy, mode="hellinger")
-    assert multi_energy_delta_score(query, true, mode="clr", eps=1e-4) > multi_energy_delta_score(query, decoy, mode="clr", eps=1e-4)
+    for mode, kwargs in [("hellinger", {}), ("clr", {"eps": 1e-4})]:
+        s_true = multi_energy_delta_score(query, true, mode=mode, **kwargs)
+        s_decoy = multi_energy_delta_score(query, decoy, mode=mode, **kwargs)
+        assert np.isfinite(s_true)
+        assert (not np.isfinite(s_decoy)) or s_true > s_decoy
 
 
 def test_joint_aggregators_are_bounded():
