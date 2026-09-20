@@ -10,11 +10,12 @@ from qfd.msnlib_pilot import evaluate_merged_convex, evaluate_same_energy_trajec
 from qfd.stats import paired_bootstrap_delta, paired_win_loss_tie
 
 
-def _comparison(rows, challenger: str, baseline: str, *, n_boot: int, seed: int):
+def _comparison(rows, challenger: str, baseline: str, *, n_boot: int, seed: int, tie_aware: bool = False):
     if not rows:
         return None
-    a = [r[f"rr_{challenger}"] for r in rows]
-    b = [r[f"rr_{baseline}"] for r in rows]
+    prefix = "rr_tie_" if tie_aware else "rr_"
+    a = [r[f"{prefix}{challenger}"] for r in rows]
+    b = [r[f"{prefix}{baseline}"] for r in rows]
     return {
         **paired_bootstrap_delta(a, b, n_boot=n_boot, seed=seed),
         **paired_win_loss_tie(a, b),
@@ -40,6 +41,15 @@ def _write_rows(path: Path, rows):
             w.writerow(out)
 
 
+def _paired_block(rows, challengers, baseline, *, n_boot, seed, tie_aware):
+    return {
+        method: _comparison(
+            rows, method, baseline, n_boot=n_boot, seed=seed, tie_aware=tie_aware,
+        )
+        for method in challengers
+    }
+
+
 def main():
     p = argparse.ArgumentParser(description="Run QFD/merged-energy pilots on an open MSnLib JSONL spectral library")
     p.add_argument("jsonl", type=Path)
@@ -54,28 +64,49 @@ def main():
     merged = evaluate_merged_convex(records, hard_static_threshold=args.hard_static_threshold)
 
     trajectory_summary = _strip_rows(trajectory)
-    trajectory_summary["paired_vs_static"] = {
-        "joint_energy": _comparison(trajectory["rows"], "joint_energy", "static_best", n_boot=args.bootstrap, seed=args.seed),
-        "two_energy_qfd": _comparison(trajectory["rows"], "two_energy_qfd", "static_best", n_boot=args.bootstrap, seed=args.seed),
-    }
+    t_methods = ("joint_energy", "two_energy_qfd")
     hard_t = [r for r in trajectory["rows"] if r["hard_static"]]
-    trajectory_summary["hard_paired_vs_static"] = {
-        "joint_energy": _comparison(hard_t, "joint_energy", "static_best", n_boot=args.bootstrap, seed=args.seed),
-        "two_energy_qfd": _comparison(hard_t, "two_energy_qfd", "static_best", n_boot=args.bootstrap, seed=args.seed),
-    }
+    trajectory_summary["paired_vs_static_deterministic"] = _paired_block(
+        trajectory["rows"], t_methods, "static_best",
+        n_boot=args.bootstrap, seed=args.seed, tie_aware=False,
+    )
+    trajectory_summary["hard_paired_vs_static_deterministic"] = _paired_block(
+        hard_t, t_methods, "static_best",
+        n_boot=args.bootstrap, seed=args.seed, tie_aware=False,
+    )
+    trajectory_summary["paired_vs_static_tieaware"] = _paired_block(
+        trajectory["rows"], t_methods, "static_best",
+        n_boot=args.bootstrap, seed=args.seed, tie_aware=True,
+    )
+    trajectory_summary["hard_paired_vs_static_tieaware"] = _paired_block(
+        hard_t, t_methods, "static_best",
+        n_boot=args.bootstrap, seed=args.seed, tie_aware=True,
+    )
 
     merged_summary = _strip_rows(merged)
-    merged_summary["paired_vs_static"] = {
-        "merged_convex": _comparison(merged["rows"], "merged_convex", "static_best", n_boot=args.bootstrap, seed=args.seed),
-    }
+    m_methods = ("merged_convex",)
     hard_m = [r for r in merged["rows"] if r["hard_static"]]
-    merged_summary["hard_paired_vs_static"] = {
-        "merged_convex": _comparison(hard_m, "merged_convex", "static_best", n_boot=args.bootstrap, seed=args.seed),
-    }
+    merged_summary["paired_vs_static_deterministic"] = _paired_block(
+        merged["rows"], m_methods, "static_best",
+        n_boot=args.bootstrap, seed=args.seed, tie_aware=False,
+    )
+    merged_summary["hard_paired_vs_static_deterministic"] = _paired_block(
+        hard_m, m_methods, "static_best",
+        n_boot=args.bootstrap, seed=args.seed, tie_aware=False,
+    )
+    merged_summary["paired_vs_static_tieaware"] = _paired_block(
+        merged["rows"], m_methods, "static_best",
+        n_boot=args.bootstrap, seed=args.seed, tie_aware=True,
+    )
+    merged_summary["hard_paired_vs_static_tieaware"] = _paired_block(
+        hard_m, m_methods, "static_best",
+        n_boot=args.bootstrap, seed=args.seed, tie_aware=True,
+    )
 
     report = {
         "dataset_records": len(records),
         "hard_static_threshold": args.hard_static_threshold,
+        "primary_ranking_policy": "tie-aware expected reciprocal rank and fractional top-k credit; deterministic ranks retained only for diagnostics",
         "trajectory": trajectory_summary,
         "merged_energy": merged_summary,
         "interpretation_guardrail": "These are open MSnLib Class-1/mixture-consistency experiments. They are not CASMI hidden-test results and do not establish de novo structure elucidation.",
