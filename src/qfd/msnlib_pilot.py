@@ -6,7 +6,7 @@ import numpy as np
 
 from .benchmark import rank_library, static_best_score
 from .merged import merged_convex_score
-from .metrics import rank_by_score, reciprocal_rank_at_k
+from .metrics import rank_by_score, reciprocal_rank_at_k, tie_aware_truth_metrics
 from .msnlib import MSnLibRecord
 from .qfd_profile import two_energy_qfd_score
 from .spectra import preprocess_spectrum
@@ -86,6 +86,19 @@ def _unambiguous_groups(groups):
     return {k: g for k, g in groups.items() if not g["ambiguous_slots"]}
 
 
+def _add_tie_metrics(row, mode, scoremap, truth_id):
+    ids = list(scoremap)
+    vals = [float(scoremap[k]) for k in ids]
+    tie = tie_aware_truth_metrics(ids, vals, truth_id, k=25)
+    row[f"rank_min_{mode}"] = tie["rank_min"]
+    row[f"rank_max_{mode}"] = tie["rank_max"]
+    row[f"expected_rank_{mode}"] = tie["expected_rank"]
+    row[f"tie_size_{mode}"] = tie["tie_size"]
+    row[f"rr_tie_{mode}"] = tie["rr_at_k"]
+    row[f"top1_tie_{mode}"] = tie["top1_credit"]
+    row[f"top5_tie_{mode}"] = tie["top5_credit"]
+
+
 def _summarize(rows, modes):
     out = {"n_queries": len(rows)}
     if not rows:
@@ -96,6 +109,11 @@ def _summarize(rows, modes):
         out[f"mrr25_{mode}"] = float(np.mean(rrs))
         out[f"top1_{mode}"] = float(np.mean([x == 1 for x in ranks]))
         out[f"top5_{mode}"] = float(np.mean([x <= 5 for x in ranks]))
+        out[f"mrr25_tieaware_{mode}"] = float(np.mean([r[f"rr_tie_{mode}"] for r in rows]))
+        out[f"top1_tieaware_{mode}"] = float(np.mean([r[f"top1_tie_{mode}"] for r in rows]))
+        out[f"top5_tieaware_{mode}"] = float(np.mean([r[f"top5_tie_{mode}"] for r in rows]))
+        out[f"truth_tied_queries_{mode}"] = int(sum(r[f"tie_size_{mode}"] > 1 for r in rows))
+        out[f"max_truth_tie_size_{mode}"] = int(max(r[f"tie_size_{mode}"] for r in rows))
     return out
 
 
@@ -177,6 +195,7 @@ def evaluate_same_energy_trajectory(records: list[MSnLibRecord], *, hard_static_
             row[f"rank_{mode}"] = ranked.index(truth_id) + 1
             row[f"rr_{mode}"] = reciprocal_rank_at_k(ranked, truth_id, 25)
             row[f"score_{mode}"] = scoremap[truth_id]
+            _add_tie_metrics(row, mode, scoremap, truth_id)
         rows.append(row)
     modes = ("static_best", "joint_energy", "two_energy_qfd")
     return {
@@ -187,6 +206,7 @@ def evaluate_same_energy_trajectory(records: list[MSnLibRecord], *, hard_static_
         "indexed_full_identity_groups": len(indexed),
         "excluded_ambiguous_full_identity_groups": len(indexed) - len(groups),
         "identity_definition": "full InChIKey + adduct",
+        "ranking_primary": "tie-aware expected reciprocal rank and fractional top-k credit",
         "caveat": "SAME_ENERGY references are derived from replicate acquisitions; this is a Class-1 consistency/ranking test, not structure-held-out generalization.",
     }
 
@@ -239,13 +259,15 @@ def evaluate_merged_convex(records: list[MSnLibRecord], *, hard_static_threshold
                 "energies": list(wanted),
                 "best_decoy_static_score": best_decoy,
                 "hard_static": best_decoy >= hard_static_threshold,
-                "rank_static_best": ranked_static.index(truth_id) + 1,
-                "rr_static_best": reciprocal_rank_at_k(ranked_static, truth_id, 25),
-                "score_static_best": static_scores[truth_id],
-                "rank_merged_convex": ranked_convex.index(truth_id) + 1,
-                "rr_merged_convex": reciprocal_rank_at_k(ranked_convex, truth_id, 25),
-                "score_merged_convex": convex_scores[truth_id],
             }
+            for mode, ranked, scoremap in [
+                ("static_best", ranked_static, static_scores),
+                ("merged_convex", ranked_convex, convex_scores),
+            ]:
+                row[f"rank_{mode}"] = ranked.index(truth_id) + 1
+                row[f"rr_{mode}"] = reciprocal_rank_at_k(ranked, truth_id, 25)
+                row[f"score_{mode}"] = scoremap[truth_id]
+                _add_tie_metrics(row, mode, scoremap, truth_id)
             rows.append(row)
     modes = ("static_best", "merged_convex")
     return {
@@ -255,5 +277,6 @@ def evaluate_merged_convex(records: list[MSnLibRecord], *, hard_static_threshold
         "indexed_full_identity_groups": len(indexed),
         "excluded_ambiguous_full_identity_groups": len(indexed) - len(groups),
         "identity_definition": "full InChIKey + adduct",
+        "ranking_primary": "tie-aware expected reciprocal rank and fractional top-k credit",
         "caveat": "ALL_ENERGIES queries are constructed from the same released acquisition family as the single-energy references; this tests the mixture geometry and Class-1 ranking, not de novo generalization.",
     }
