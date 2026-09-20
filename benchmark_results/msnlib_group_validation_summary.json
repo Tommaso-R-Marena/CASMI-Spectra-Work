@@ -3,6 +3,7 @@
   "protocol": {
     "split_unit": "molecular formula (all adducts and queries for a formula stay together)",
     "block_bootstrap_unit": "molecular formula",
+    "block_randomization_unit": "molecular formula",
     "validation_fraction": 0.5,
     "split_salt": "msnlib-group-validation-v1",
     "split_algorithm": "SHA-256(salt + unit-separator + formula), first 64 bits",
@@ -12,7 +13,8 @@
     "primary_merged_method_frozen_before_validation": "hybrid_static_convex_100",
     "primary_merged_baseline": "static_best",
     "hard_subset_rule": "best wrong static similarity >= 0.8",
-    "selection_guardrail": "The validation split, split salt, primary methods, baselines, and weights are fixed in code. Validation outcomes must not be used to retune this run."
+    "selection_guardrail": "The validation split, split salt, primary methods, baselines, and weights are fixed in code. Validation outcomes must not be used to retune this run.",
+    "inference_guardrail": "Primary uncertainty is clustered by molecular formula. The block bootstrap and the independent two-sided whole-formula sign-flip/randomization test are both reported."
   },
   "trajectory_exact_condition": {
     "all": {
@@ -237,6 +239,16 @@
         "losses": 0,
         "ties": 58
       },
+      "rr_block_signflip": {
+        "delta": 0.016666666666666666,
+        "p_value_two_sided": 0.49868250658746704,
+        "n": 60,
+        "n_blocks": 30,
+        "mode": "monte_carlo",
+        "n_permutations": 200000,
+        "seed": 271830,
+        "extreme": 99736
+      },
       "top1": {
         "delta": 0.03333333333333333,
         "ci_low": 0.0,
@@ -246,6 +258,16 @@
         "seed": 271829,
         "n_boot": 5000,
         "resampling_unit": "block"
+      },
+      "top1_block_signflip": {
+        "delta": 0.03333333333333333,
+        "p_value_two_sided": 0.49906250468747654,
+        "n": 60,
+        "n_blocks": 30,
+        "mode": "monte_carlo",
+        "n_permutations": 200000,
+        "seed": 271831,
+        "extreme": 99812
       }
     },
     "primary_block_bootstrap_validation": {
@@ -264,6 +286,15 @@
         "losses": 0,
         "ties": 28
       },
+      "rr_block_signflip": {
+        "delta": 0.03333333333333333,
+        "p_value_two_sided": 0.5,
+        "n": 30,
+        "n_blocks": 15,
+        "mode": "exact",
+        "n_sign_assignments": 32768,
+        "extreme": 16384
+      },
       "top1": {
         "delta": 0.06666666666666667,
         "ci_low": 0.0,
@@ -273,6 +304,15 @@
         "seed": 271839,
         "n_boot": 5000,
         "resampling_unit": "block"
+      },
+      "top1_block_signflip": {
+        "delta": 0.06666666666666667,
+        "p_value_two_sided": 0.5,
+        "n": 30,
+        "n_blocks": 15,
+        "mode": "exact",
+        "n_sign_assignments": 32768,
+        "extreme": 16384
       }
     },
     "primary_block_bootstrap_hard_validation": {
@@ -291,6 +331,15 @@
         "losses": 0,
         "ties": 17
       },
+      "rr_block_signflip": {
+        "delta": 0.05263157894736842,
+        "p_value_two_sided": 0.5,
+        "n": 19,
+        "n_blocks": 9,
+        "mode": "exact",
+        "n_sign_assignments": 512,
+        "extreme": 256
+      },
       "top1": {
         "delta": 0.10526315789473684,
         "ci_low": 0.0,
@@ -300,6 +349,15 @@
         "seed": 271849,
         "n_boot": 5000,
         "resampling_unit": "block"
+      },
+      "top1_block_signflip": {
+        "delta": 0.10526315789473684,
+        "p_value_two_sided": 0.5,
+        "n": 19,
+        "n_blocks": 9,
+        "mode": "exact",
+        "n_sign_assignments": 512,
+        "extreme": 256
       }
     },
     "primary_formula_effects_validation": {
@@ -366,8 +424,8 @@
       "mrr25_tieaware_hybrid_static_convex_050": 0.9548611111111112,
       "top1_tieaware_hybrid_static_convex_050": 0.9097222222222222,
       "top5_tieaware_hybrid_static_convex_050": 1.0,
-      "mrr25_tieaware_hybrid_static_convex_100": 0.9629629629629629,
-      "top1_tieaware_hybrid_static_convex_100": 0.9288194444444444,
+      "mrr25_tieaware_hybrid_static_convex_100": 0.9612268518518517,
+      "top1_tieaware_hybrid_static_convex_100": 0.9253472222222222,
       "top5_tieaware_hybrid_static_convex_100": 1.0,
       "mrr25_tieaware_hybrid_static_adv_050": 0.9429976851851853,
       "top1_tieaware_hybrid_static_adv_050": 0.8888888888888888,
@@ -391,8 +449,8 @@
       "mrr25_tieaware_hybrid_static_convex_050": 0.959375,
       "top1_tieaware_hybrid_static_convex_050": 0.91875,
       "top5_tieaware_hybrid_static_convex_050": 1.0,
-      "mrr25_tieaware_hybrid_static_convex_100": 0.9630208333333332,
-      "top1_tieaware_hybrid_static_convex_100": 0.93125,
+      "mrr25_tieaware_hybrid_static_convex_100": 0.9598958333333332,
+      "top1_tieaware_hybrid_static_convex_100": 0.925,
       "top5_tieaware_hybrid_static_convex_100": 1.0,
       "mrr25_tieaware_hybrid_static_adv_050": 0.9411458333333332,
       "top1_tieaware_hybrid_static_adv_050": 0.8875,
@@ -441,8 +499,8 @@
       "mrr25_tieaware_hybrid_static_convex_050": 0.8787878787878788,
       "top1_tieaware_hybrid_static_convex_050": 0.7575757575757576,
       "top5_tieaware_hybrid_static_convex_050": 1.0,
-      "mrr25_tieaware_hybrid_static_convex_100": 0.9074074074074076,
-      "top1_tieaware_hybrid_static_convex_100": 0.8232323232323232,
+      "mrr25_tieaware_hybrid_static_convex_100": 0.904882154882155,
+      "top1_tieaware_hybrid_static_convex_100": 0.8181818181818182,
       "top5_tieaware_hybrid_static_convex_100": 1.0,
       "mrr25_tieaware_hybrid_static_adv_050": 0.8543771043771045,
       "top1_tieaware_hybrid_static_adv_050": 0.7171717171717171,
@@ -466,8 +524,8 @@
       "mrr25_tieaware_hybrid_static_convex_050": 0.8942307692307693,
       "top1_tieaware_hybrid_static_convex_050": 0.7884615384615384,
       "top5_tieaware_hybrid_static_convex_050": 1.0,
-      "mrr25_tieaware_hybrid_static_convex_100": 0.9054487179487178,
-      "top1_tieaware_hybrid_static_convex_100": 0.8269230769230769,
+      "mrr25_tieaware_hybrid_static_convex_100": 0.8958333333333333,
+      "top1_tieaware_hybrid_static_convex_100": 0.8076923076923077,
       "top5_tieaware_hybrid_static_convex_100": 1.0,
       "mrr25_tieaware_hybrid_static_adv_050": 0.8573717948717948,
       "top1_tieaware_hybrid_static_adv_050": 0.7307692307692307,
@@ -491,8 +549,8 @@
       "mrr25_tieaware_hybrid_static_convex_050": 0.8617021276595744,
       "top1_tieaware_hybrid_static_convex_050": 0.723404255319149,
       "top5_tieaware_hybrid_static_convex_050": 1.0,
-      "mrr25_tieaware_hybrid_static_convex_100": 0.9095744680851063,
-      "top1_tieaware_hybrid_static_convex_100": 0.8191489361702128,
+      "mrr25_tieaware_hybrid_static_convex_100": 0.9148936170212766,
+      "top1_tieaware_hybrid_static_convex_100": 0.8297872340425532,
       "top5_tieaware_hybrid_static_convex_100": 1.0,
       "mrr25_tieaware_hybrid_static_adv_050": 0.851063829787234,
       "top1_tieaware_hybrid_static_adv_050": 0.7021276595744681,
@@ -504,27 +562,47 @@
       "method": "hybrid_static_convex_100",
       "baseline": "static_best",
       "rr": {
-        "delta": 0.006944444444444444,
-        "ci_low": -0.008899830776451987,
-        "ci_high": 0.022222716488730716,
+        "delta": 0.005208333333333333,
+        "ci_low": -0.010448562887794137,
+        "ci_high": 0.02030621002370622,
         "n": 288,
         "n_blocks": 118,
         "seed": 272828,
         "n_boot": 5000,
         "resampling_unit": "block",
-        "wins": 16,
-        "losses": 10,
-        "ties": 262
+        "wins": 15,
+        "losses": 9,
+        "ties": 264
+      },
+      "rr_block_signflip": {
+        "delta": 0.005208333333333333,
+        "p_value_two_sided": 0.5567922160389198,
+        "n": 288,
+        "n_blocks": 118,
+        "mode": "monte_carlo",
+        "n_permutations": 200000,
+        "seed": 272830,
+        "extreme": 111358
       },
       "top1": {
-        "delta": 0.015625,
-        "ci_low": -0.01219605429999254,
-        "ci_high": 0.04642956718003185,
+        "delta": 0.012152777777777778,
+        "ci_low": -0.015051429822001751,
+        "ci_high": 0.04152249134948097,
         "n": 288,
         "n_blocks": 118,
         "seed": 272829,
         "n_boot": 5000,
         "resampling_unit": "block"
+      },
+      "top1_block_signflip": {
+        "delta": 0.012152777777777778,
+        "p_value_two_sided": 0.4784176079119604,
+        "n": 288,
+        "n_blocks": 118,
+        "mode": "monte_carlo",
+        "n_permutations": 200000,
+        "seed": 272831,
+        "extreme": 95683
       }
     },
     "primary_block_bootstrap_validation": {
@@ -532,60 +610,100 @@
       "baseline": "static_best",
       "rr": {
         "delta": 0.018880208333333336,
-        "ci_low": -0.0031825252465012706,
-        "ci_high": 0.043626937661637034,
+        "ci_low": -0.0026542462845010606,
+        "ci_high": 0.04229847301136363,
         "n": 128,
         "n_blocks": 54,
         "seed": 272838,
         "n_boot": 5000,
         "resampling_unit": "block",
         "wins": 11,
-        "losses": 6,
-        "ties": 111
+        "losses": 5,
+        "ties": 112
+      },
+      "rr_block_signflip": {
+        "delta": 0.018880208333333336,
+        "p_value_two_sided": 0.1456642716786416,
+        "n": 128,
+        "n_blocks": 54,
+        "mode": "monte_carlo",
+        "n_permutations": 200000,
+        "seed": 272840,
+        "extreme": 29132
       },
       "top1": {
         "delta": 0.03515625,
-        "ci_low": -0.007352941176470588,
-        "ci_high": 0.08547297297297293,
+        "ci_low": -0.004464285714285714,
+        "ci_high": 0.08333333333333333,
         "n": 128,
         "n_blocks": 54,
         "seed": 272839,
         "n_boot": 5000,
         "resampling_unit": "block"
+      },
+      "top1_block_signflip": {
+        "delta": 0.03515625,
+        "p_value_two_sided": 0.18127409362953184,
+        "n": 128,
+        "n_blocks": 54,
+        "mode": "monte_carlo",
+        "n_permutations": 200000,
+        "seed": 272841,
+        "extreme": 36254
       }
     },
     "primary_block_bootstrap_hard_validation": {
       "method": "hybrid_static_convex_100",
       "baseline": "static_best",
       "rr": {
-        "delta": 0.06205673758865249,
-        "ci_low": 0.005555555555555556,
-        "ci_high": 0.12592700258397932,
+        "delta": 0.0673758865248227,
+        "ci_low": 0.012497783687943263,
+        "ci_high": 0.12666840277777777,
         "n": 47,
         "n_blocks": 24,
         "seed": 272848,
         "n_boot": 5000,
         "resampling_unit": "block",
         "wins": 11,
-        "losses": 4,
-        "ties": 32
+        "losses": 3,
+        "ties": 33
+      },
+      "rr_block_signflip": {
+        "delta": 0.0673758865248227,
+        "p_value_two_sided": 0.04460477697611512,
+        "n": 47,
+        "n_blocks": 24,
+        "mode": "monte_carlo",
+        "n_permutations": 200000,
+        "seed": 272850,
+        "extreme": 8920
       },
       "top1": {
-        "delta": 0.11702127659574468,
-        "ci_low": 0.009799208144796382,
+        "delta": 0.1276595744680851,
+        "ci_low": 0.020833333333333332,
         "ci_high": 0.25,
         "n": 47,
         "n_blocks": 24,
         "seed": 272849,
         "n_boot": 5000,
         "resampling_unit": "block"
+      },
+      "top1_block_signflip": {
+        "delta": 0.1276595744680851,
+        "p_value_two_sided": 0.056054719726401366,
+        "n": 47,
+        "n_blocks": 24,
+        "mode": "monte_carlo",
+        "n_permutations": 200000,
+        "seed": 272851,
+        "extreme": 11210
       }
     },
     "primary_formula_effects_validation": {
       "n_formula_blocks": 54,
-      "positive_blocks": 7,
-      "negative_blocks": 3,
-      "zero_blocks": 44,
+      "positive_blocks": 8,
+      "negative_blocks": 4,
+      "zero_blocks": 42,
       "mean_formula_delta": 0.018518518518518517,
       "median_formula_delta": 0.0,
       "effects": {
@@ -607,7 +725,7 @@
         "C19H27NO4": 0.25,
         "C20H18N6O3": 0.0,
         "C20H20N6": 0.0,
-        "C20H25ClN4O2S2": 0.0,
+        "C20H25ClN4O2S2": -0.125,
         "C21H17BrN2O2": 0.0,
         "C21H19N3O4": 0.0,
         "C21H20N2O4S": 0.0,
@@ -615,7 +733,7 @@
         "C21H24N2O5": 0.0,
         "C21H24N6O": 0.0,
         "C22H18ClN3O3S": 0.0,
-        "C22H18N4O": 0.5,
+        "C22H18N4O": 0.375,
         "C22H19N3O4": 0.0,
         "C22H20N2O4": 0.0,
         "C22H23N3O2": 0.0,
@@ -626,7 +744,7 @@
         "C22H26N2O5S2": -0.125,
         "C22H29N3O5": -0.16666666666666666,
         "C22H29NO6": 0.0,
-        "C23H19FN2O": 0.0,
+        "C23H19FN2O": 0.25,
         "C23H21N3O4S": 0.0,
         "C23H22FN3O4": 0.0,
         "C23H26N2O4S": 0.0,
@@ -647,10 +765,10 @@
     },
     "primary_formula_effects_hard_validation": {
       "n_formula_blocks": 24,
-      "positive_blocks": 8,
+      "positive_blocks": 9,
       "negative_blocks": 2,
-      "zero_blocks": 14,
-      "mean_formula_delta": 0.07118055555555557,
+      "zero_blocks": 13,
+      "mean_formula_delta": 0.0763888888888889,
       "median_formula_delta": 0.0,
       "effects": {
         "C15H18N2O3S": 0.0,
@@ -666,11 +784,11 @@
         "C19H27NO4": 0.5,
         "C20H25ClN4O2S2": 0.25,
         "C22H18ClN3O3S": 0.0,
-        "C22H18N4O": 0.5,
+        "C22H18N4O": 0.375,
         "C22H24N2O4S": 0.0,
         "C22H26N2O5S2": -0.125,
         "C22H29N3O5": -0.25,
-        "C23H19FN2O": 0.0,
+        "C23H19FN2O": 0.25,
         "C23H21N3O4S": 0.0,
         "C23H22FN3O4": 0.0,
         "C25H20N4O": 0.25,
