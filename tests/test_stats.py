@@ -1,5 +1,6 @@
 from qfd.stats import (
     paired_block_bootstrap_delta,
+    paired_block_signflip_test,
     paired_bootstrap_delta,
     paired_win_loss_tie,
     stable_group_is_validation,
@@ -35,6 +36,44 @@ def test_block_bootstrap_rejects_misaligned_blocks():
         assert "blocks" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_block_signflip_exact_known_case():
+    # Three independent blocks all favor a. Under the sharp paired null, only the
+    # all-positive and all-negative sign assignments are as extreme as observed.
+    got = paired_block_signflip_test(
+        [1.0, 1.0, 1.0], [0.0, 0.0, 0.0], ["a", "b", "c"], exact_max_blocks=20
+    )
+    assert got["mode"] == "exact"
+    assert got["n_sign_assignments"] == 8
+    assert got["extreme"] == 2
+    assert got["p_value_two_sided"] == 0.25
+
+
+def test_block_signflip_flips_repeated_queries_together():
+    # The first two observations form one block, so this is a 2-block exact test,
+    # not a 3-query sign test.
+    got = paired_block_signflip_test(
+        [1.0, 1.0, 1.0], [0.0, 0.0, 0.0], ["a", "a", "b"], exact_max_blocks=20
+    )
+    assert got["n_blocks"] == 2
+    assert got["n_sign_assignments"] == 4
+    assert got["p_value_two_sided"] == 0.5
+
+
+def test_block_signflip_monte_carlo_reproducible():
+    a = [1.0] * 6
+    b = [0.0] * 6
+    blocks = [f"g{i}" for i in range(6)]
+    x = paired_block_signflip_test(
+        a, b, blocks, exact_max_blocks=3, n_permutations=2000, seed=19
+    )
+    y = paired_block_signflip_test(
+        a, b, blocks, exact_max_blocks=3, n_permutations=2000, seed=19
+    )
+    assert x == y
+    assert x["mode"] == "monte_carlo"
+    assert 0.0 < x["p_value_two_sided"] <= 1.0
 
 
 def test_stable_group_split_is_deterministic_and_salt_sensitive():
