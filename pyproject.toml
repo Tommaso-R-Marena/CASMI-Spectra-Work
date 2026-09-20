@@ -1,10 +1,16 @@
 [build-system]
-requires=["setuptools"]
-build-backend="setuptools.build_meta"
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name="qfd-casmi"
-version="0.1.0"
-requires-python=">=3.10"
-dependencies=["numpy","scipy"]
+name = "qfd-casmi"
+version = "0.2.0"
+requires-python = ">=3.10"
+dependencies = ["numpy", "scipy"]
+
+[project.optional-dependencies]
+data = ["polars>=1.0", "pyarrow>=15"]
+dev = ["pytest>=8", "polars>=1.0", "pyarrow>=15"]
+
 [tool.setuptools.packages.find]
-where=["src"]
+where = ["src"]
