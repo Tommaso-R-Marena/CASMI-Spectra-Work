@@ -18,25 +18,27 @@ def test_library_pilot_cli_end_to_end(tmp_path):
 
     rows = []
     for key, dynamic in [("A", True), ("B", False)]:
-        for idx, e in enumerate([10.0, 20.0, 30.0, 40.0]):
+        for idx, e in enumerate([20.0, 40.0, 60.0]):
             if dynamic:
-                ints = [[1, .5, .25], [.8, .7, .25], [.5, 1, .25], [.3, 1, .25]][idx]
+                ints = [[1, .5, .25], [.5, 1, .25], [.25, 1, .5]][idx]
             else:
                 ints = [1, .5, .25]
-            rows.append({
-                "inchikey14": key,
-                "molecular_formula": "C6H6",
-                "spectrum_id": f"{key}{idx}",
-                "adduct": "[M+H]+",
-                "collision_energy_ev": [e],
-                "ms2_mzs": [50.0, 100.0, 150.0],
-                "ms2_normalized_intensities": ints,
-                "base_peak_intensity": 10000.0,
-                "precursor_mz": 200.0,
-                "ingest_lib": "enveda-180",
-                "instrument_type": "timsTOF",
-                "ionization_mode": "positive",
-            })
+            for rep in [0, 1]:
+                vals = [float(x) * (1.0 + 0.01 * rep) for x in ints]
+                rows.append({
+                    "inchikey14": key,
+                    "molecular_formula": "C6H6",
+                    "spectrum_id": f"{key}{idx}r{rep}",
+                    "adduct": "[M+H]+",
+                    "collision_energy_ev": [e],
+                    "ms2_mzs": [50.0, 100.0, 150.0],
+                    "ms2_normalized_intensities": vals,
+                    "base_peak_intensity": 10000.0,
+                    "precursor_mz": 200.0,
+                    "ingest_lib": "enveda-180",
+                    "instrument_type": "timsTOF",
+                    "ionization_mode": "positive",
+                })
     path = tmp_path / "train.parquet"
     pl.DataFrame(rows).write_parquet(path)
     out = tmp_path / "out"
@@ -45,10 +47,12 @@ def test_library_pilot_cli_end_to_end(tmp_path):
     script = Path(__file__).resolve().parents[1] / "scripts" / "run_library_pilot.py"
     subprocess.run([
         sys.executable, str(script), str(path), "--out-dir", str(out),
-        "--max-structures", "10", "--bootstrap", "50", "--max-energy-gap-ev", "10",
+        "--max-structures", "10", "--bootstrap", "50",
     ], check=True, env=env, capture_output=True, text=True)
     summary = json.loads((out / "summary.json").read_text())
     assert summary["n_queries"] == 2
+    assert summary["config"]["split_mode"] == "replicate"
+    assert summary["config"]["max_energy_gap_ev"] == 0.0
     assert summary["cohort"]["selected_structures"] == 2
     assert (out / "manifest.parquet").exists()
     assert (out / "per_query.csv").exists()
