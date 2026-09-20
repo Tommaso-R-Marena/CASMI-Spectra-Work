@@ -68,16 +68,41 @@ def split_query_reference(records: list[PilotRecord], *, min_energies_each: int 
         ref = [r.view for e in r_energies for r in sorted(by_energy[e], key=lambda x: x.spectrum_id)]
         formula = group[0].molecular_formula
         prev = result.get(key)
-        candidate = {
-            "formula": formula,
-            "adduct": adduct,
-            "query": q,
-            "reference": ref,
-            "n_energies": len(energies),
+        candidate = {"formula": formula, "adduct": adduct, "query": q, "reference": ref, "n_energies": len(energies), "split_mode": "interleaved"}
+        if prev is None or (len(q) + len(ref), str(adduct)) > (len(prev["query"]) + len(prev["reference"]), str(prev["adduct"])):
+            result[key] = candidate
+    return result
+
+
+def split_query_reference_replicates(records: list[PilotRecord], *, min_energies: int = 2):
+    """Hold out distinct spectrum IDs at the same energies for clean Class-1 testing."""
+    by_group = defaultdict(list)
+    for r in records:
+        by_group[(r.inchikey14, r.adduct)].append(r)
+    result = {}
+    for (key, adduct), group in by_group.items():
+        by_energy = defaultdict(list)
+        for r in group:
+            by_energy[r.energy_ev].append(r)
+        replicated = {
+            e: sorted(vals, key=lambda x: x.spectrum_id)
+            for e, vals in by_energy.items() if len(vals) >= 2
         }
-        if prev is None or (len(q) + len(ref), str(adduct)) > (
-            len(prev["query"]) + len(prev["reference"]), str(prev["adduct"])
-        ):
+        if len(replicated) < min_energies:
+            continue
+        q = []
+        ref = []
+        for e in sorted(replicated):
+            vals = replicated[e]
+            q.append(vals[0].view)
+            ref.append(vals[1].view)
+        formula = group[0].molecular_formula
+        candidate = {
+            "formula": formula, "adduct": adduct, "query": q, "reference": ref,
+            "n_energies": len(replicated), "split_mode": "replicate",
+        }
+        prev = result.get(key)
+        if prev is None or (len(q) + len(ref), str(adduct)) > (len(prev["query"]) + len(prev["reference"]), str(prev["adduct"])):
             result[key] = candidate
     return result
 
@@ -99,15 +124,9 @@ def evaluate_formula_candidates(
         if len(candidates) < 2:
             continue
         library = {cid: groups[cid]["reference"] for cid in candidates}
-        result = {
-            "inchikey14": truth,
-            "molecular_formula": g["formula"],
-            "candidate_count": len(candidates),
-        }
+        result = {"inchikey14": truth, "molecular_formula": g["formula"], "candidate_count": len(candidates)}
         for mode in modes:
-            ranked, scores = rank_library(
-                g["query"], library, mode=mode, max_energy_gap_ev=max_energy_gap_ev,
-            )
+            ranked, scores = rank_library(g["query"], library, mode=mode, max_energy_gap_ev=max_energy_gap_ev)
             result[f"rr_{mode}"] = reciprocal_rank_at_k(ranked, truth, k=k)
             result[f"rank_{mode}"] = ranked.index(truth) + 1 if truth in ranked else math.inf
             result[f"score_{mode}"] = scores.get(truth, -math.inf)
