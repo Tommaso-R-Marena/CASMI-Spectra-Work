@@ -33,3 +33,13 @@ def test_formula_candidate_eval_returns_all_modes():
     assert summary["n_queries"] == 2
     for mode in ("static_best", "joint_energy", "two_energy_qfd"):
         assert f"mrr25_{mode}" in summary
+
+
+def test_static_hardness_is_defined_only_from_static_decoys():
+    records = []
+    for i, e in enumerate([10, 20, 30, 40]):
+        records += [rec("A", f"a{i}", e, [1, .5, .25]), rec("B", f"b{i}", e, [1, .49, .25])]
+    groups = split_query_reference(records, min_energies_each=2)
+    rows = evaluate_formula_candidates(groups, max_energy_gap_ev=15)
+    assert all("best_decoy_static_score" in r for r in rows)
+    assert all(r["best_decoy_static_score"] > .99 for r in rows)
