@@ -17,15 +17,16 @@ def _json_safe(x):
     return x
 
 
-def _paired(rows, methods, baseline, *, n_boot, seed):
+def _paired(rows, methods, baseline, *, n_boot, seed, tie_aware=False):
     out = {}
     if not rows:
         return out
-    base = [float(r[f"rr_{baseline}"]) for r in rows]
+    prefix = "rr_tie_" if tie_aware else "rr_"
+    base = [float(r[f"{prefix}{baseline}"]) for r in rows]
     for method in methods:
         if method == baseline:
             continue
-        vals = [float(r[f"rr_{method}"]) for r in rows]
+        vals = [float(r[f"{prefix}{method}"]) for r in rows]
         out[method] = {
             **paired_bootstrap_delta(vals, base, n_boot=n_boot, seed=seed),
             **paired_win_loss_tie(vals, base),
@@ -61,25 +62,39 @@ def main():
     mrows = merged.pop("rows")
     tmethods = tuple(trajectory["methods"])
     mmethods = tuple(merged["methods"])
+    thard = [r for r in trows if r["hard_static"]]
+    mhard = [r for r in mrows if r["hard_static"]]
 
-    trajectory["paired_vs_joint_mean"] = _paired(
+    trajectory["paired_vs_joint_mean_deterministic"] = _paired(
         trows, tmethods, "joint_mean", n_boot=args.bootstrap, seed=args.seed,
     )
-    thard = [r for r in trows if r["hard_static"]]
-    trajectory["hard_paired_vs_joint_mean"] = _paired(
+    trajectory["hard_paired_vs_joint_mean_deterministic"] = _paired(
         thard, tmethods, "joint_mean", n_boot=args.bootstrap, seed=args.seed,
     )
-    merged["paired_vs_static"] = _paired(
+    trajectory["paired_vs_joint_mean_tieaware"] = _paired(
+        trows, tmethods, "joint_mean", n_boot=args.bootstrap, seed=args.seed, tie_aware=True,
+    )
+    trajectory["hard_paired_vs_joint_mean_tieaware"] = _paired(
+        thard, tmethods, "joint_mean", n_boot=args.bootstrap, seed=args.seed, tie_aware=True,
+    )
+
+    merged["paired_vs_static_deterministic"] = _paired(
         mrows, mmethods, "static_best", n_boot=args.bootstrap, seed=args.seed,
     )
-    mhard = [r for r in mrows if r["hard_static"]]
-    merged["hard_paired_vs_static"] = _paired(
+    merged["hard_paired_vs_static_deterministic"] = _paired(
         mhard, mmethods, "static_best", n_boot=args.bootstrap, seed=args.seed,
+    )
+    merged["paired_vs_static_tieaware"] = _paired(
+        mrows, mmethods, "static_best", n_boot=args.bootstrap, seed=args.seed, tie_aware=True,
+    )
+    merged["hard_paired_vs_static_tieaware"] = _paired(
+        mhard, mmethods, "static_best", n_boot=args.bootstrap, seed=args.seed, tie_aware=True,
     )
 
     summary = {
         "dataset_records": len(records),
         "hard_static_threshold": args.hard_static_threshold,
+        "primary_ranking_policy": "tie-aware expected reciprocal rank and fractional top-k credit; deterministic ranks retained only for diagnostics",
         "trajectory_exact_condition": trajectory,
         "merged_energy_variants": merged,
         "interpretation_guardrail": (
