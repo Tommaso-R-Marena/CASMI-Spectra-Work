@@ -5,8 +5,8 @@ import csv
 import json
 from pathlib import Path
 
-from qfd.pilot_eval import evaluate_formula_candidates, rows_to_records, split_query_reference, summarize_results
-from qfd.pilot_manifest import build_pilot_manifest
+from qfd.pilot_eval import evaluate_formula_candidates, rows_to_records, split_query_reference, split_query_reference_replicates, summarize_results
+from qfd.pilot_manifest import build_pilot_manifest, build_replicate_pilot_manifest
 from qfd.stats import paired_bootstrap_delta, paired_win_loss_tie
 
 
@@ -30,6 +30,7 @@ def main():
     p.add_argument("--out-dir", type=Path, default=Path("results/library_pilot"))
     p.add_argument("--ingest-lib", default="enveda-180")
     p.add_argument("--max-structures", type=int, default=1000)
+    p.add_argument("--split-mode", choices=["replicate", "interleaved"], default="replicate")
     p.add_argument("--min-energies-each", type=int, default=2)
     p.add_argument("--intensity-floor", type=float, default=0.001)
     p.add_argument("--max-peaks", type=int, default=128)
@@ -39,15 +40,20 @@ def main():
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args()
 
-    min_distinct_energies = 2 * args.min_energies_each
-    manifest = build_pilot_manifest(
-        args.train_parquet,
-        ingest_lib=args.ingest_lib,
-        min_spectra=min_distinct_energies,
-        min_energies=min_distinct_energies,
-        max_structures=args.max_structures,
-        min_formula_structures=2,
-    )
+    if args.split_mode == "replicate":
+        min_distinct_energies = args.min_energies_each
+        manifest = build_replicate_pilot_manifest(
+            args.train_parquet, ingest_lib=args.ingest_lib,
+            min_replicates_per_energy=2, min_energies=min_distinct_energies,
+            max_structures=args.max_structures, min_formula_structures=2,
+        )
+    else:
+        min_distinct_energies = 2 * args.min_energies_each
+        manifest = build_pilot_manifest(
+            args.train_parquet, ingest_lib=args.ingest_lib,
+            min_spectra=min_distinct_energies, min_energies=min_distinct_energies,
+            max_structures=args.max_structures, min_formula_structures=2,
+        )
     ids = manifest["inchikey14"].unique().to_list()
     if len(ids) < 2:
         raise SystemExit("pilot manifest produced fewer than two structures; no meaningful same-formula benchmark is possible")
@@ -67,15 +73,17 @@ def main():
         .filter(pl.col("collision_energy_ev").list.len() == 1)
         .collect()
     )
-    rows = data.to_dicts()
     records = rows_to_records(
-        rows,
-        intensity_floor=args.intensity_floor,
-        max_peaks=args.max_peaks,
-        transform=args.transform,
+        data.to_dicts(), intensity_floor=args.intensity_floor,
+        max_peaks=args.max_peaks, transform=args.transform,
     )
-    groups = split_query_reference(records, min_energies_each=args.min_energies_each)
-    per_query = evaluate_formula_candidates(groups, max_energy_gap_ev=args.max_energy_gap_ev)
+    if args.split_mode == "replicate":
+        groups = split_query_reference_replicates(records, min_energies=args.min_energies_each)
+        score_gap = 0.0
+    else:
+        groups = split_query_reference(records, min_energies_each=args.min_energies_each)
+        score_gap = args.max_energy_gap_ev
+    per_query = evaluate_formula_candidates(groups, max_energy_gap_ev=score_gap)
     summary = summarize_results(per_query)
 
     modes = ("static_best", "joint_energy", "two_energy_qfd")
@@ -91,12 +99,13 @@ def main():
     summary["config"] = {
         "ingest_lib": args.ingest_lib,
         "max_structures": args.max_structures,
+        "split_mode": args.split_mode,
         "min_energies_each": args.min_energies_each,
         "required_distinct_energies": min_distinct_energies,
         "intensity_floor": args.intensity_floor,
         "max_peaks": args.max_peaks,
         "transform": args.transform,
-        "max_energy_gap_ev": args.max_energy_gap_ev,
+        "max_energy_gap_ev": score_gap,
         "seed": args.seed,
     }
     summary["cohort"] = {
