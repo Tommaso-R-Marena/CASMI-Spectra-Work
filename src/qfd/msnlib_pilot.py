@@ -24,6 +24,23 @@ def _clean_view(rec: MSnLibRecord, *, transform: str) -> SpectrumView:
     )
 
 
+def _put_unique_energy(bucket, energy: float, rec: MSnLibRecord, *, label: str, key):
+    """Insert a single-energy record without silently discarding a replicate.
+
+    The released MSnLib views are expected to provide at most one record for each
+    (connectivity key, adduct, merge type, collision energy) slot used by these
+    pilots.  Silent dict overwrite would make results depend on JSONL record order,
+    so fail loudly if that invariant is violated.
+    """
+    if energy in bucket:
+        prior = bucket[energy]
+        raise ValueError(
+            f"duplicate {label} record for inchikey14={key[0]!r}, adduct={key[1]!r}, "
+            f"energy={energy}: spectrum_id={prior.spectrum_id!r} and {rec.spectrum_id!r}"
+        )
+    bucket[energy] = rec
+
+
 def index_records(records: list[MSnLibRecord]):
     groups = defaultdict(lambda: {
         "formula": None, "single_best": {}, "same_energy": {},
@@ -32,13 +49,19 @@ def index_records(records: list[MSnLibRecord]):
     for r in records:
         key = (r.inchikey14, r.adduct)
         g = groups[key]
-        g["formula"] = r.molecular_formula
+        if g["formula"] is None:
+            g["formula"] = r.molecular_formula
+        elif g["formula"] != r.molecular_formula:
+            raise ValueError(
+                f"inconsistent formulas for inchikey14={key[0]!r}, adduct={key[1]!r}: "
+                f"{g['formula']!r} vs {r.molecular_formula!r}"
+            )
         if r.is_single_energy:
             e = r.collision_energies[0]
             if r.merge_type == "SINGLE_BEST_SCAN":
-                g["single_best"][e] = r
+                _put_unique_energy(g["single_best"], e, r, label="SINGLE_BEST_SCAN", key=key)
             elif r.merge_type == "SAME_ENERGY":
-                g["same_energy"][e] = r
+                _put_unique_energy(g["same_energy"], e, r, label="SAME_ENERGY", key=key)
         elif r.merge_type == "ALL_ENERGIES":
             g["all_energies"].append(r)
         elif r.merge_type == "ALL_MSN_TO_PSEUDO_MS2":
@@ -156,10 +179,10 @@ def evaluate_merged_convex(records: list[MSnLibRecord], *, hard_static_threshold
             wanted = tuple(dict.fromkeys(qrec.collision_energies))
             if len(wanted) < 2 or not all(e in g["single_best"] for e in wanted):
                 continue
-            candidate_keys = [
+            candidate_keys = sorted([
                 cid for cid in by_formula_adduct[(g["formula"], truth[1])]
                 if all(e in groups[cid]["single_best"] for e in wanted)
-            ]
+            ])
             if len(candidate_keys) < 2:
                 continue
             q_raw = _clean_view(qrec, transform="none")
