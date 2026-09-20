@@ -13,6 +13,7 @@ from qfd.msnlib import load_msnlib_jsonl
 from qfd.msnlib_variants import evaluate_exact_condition_variants, evaluate_merged_variants
 from qfd.stats import (
     paired_block_bootstrap_delta,
+    paired_block_signflip_test,
     paired_win_loss_tie,
     stable_group_is_validation,
 )
@@ -67,7 +68,15 @@ def _summary(rows, methods):
     return result
 
 
-def _block_comparison(rows, method, baseline, *, n_boot: int, seed: int):
+def _block_comparison(
+    rows,
+    method,
+    baseline,
+    *,
+    n_boot: int,
+    n_permutations: int,
+    seed: int,
+):
     if not rows:
         return {}
     blocks = [r["formula"] for r in rows]
@@ -84,8 +93,22 @@ def _block_comparison(rows, method, baseline, *, n_boot: int, seed: int):
             ),
             **paired_win_loss_tie(rr_method, rr_base),
         },
+        "rr_block_signflip": paired_block_signflip_test(
+            rr_method,
+            rr_base,
+            blocks,
+            seed=seed + 2,
+            n_permutations=n_permutations,
+        ),
         "top1": paired_block_bootstrap_delta(
             top1_method, top1_base, blocks, n_boot=n_boot, seed=seed + 1
+        ),
+        "top1_block_signflip": paired_block_signflip_test(
+            top1_method,
+            top1_base,
+            blocks,
+            seed=seed + 3,
+            n_permutations=n_permutations,
         ),
     }
 
@@ -112,7 +135,16 @@ def _formula_effects(rows, method, baseline):
     }
 
 
-def _section(rows, methods, primary, baseline, *, n_boot, seed):
+def _section(
+    rows,
+    methods,
+    primary,
+    baseline,
+    *,
+    n_boot,
+    n_permutations,
+    seed,
+):
     discovery = [r for r in rows if r["split"] == "discovery"]
     validation = [r for r in rows if r["split"] == "validation"]
     hard = [r for r in rows if r["hard_static"]]
@@ -128,13 +160,28 @@ def _section(rows, methods, primary, baseline, *, n_boot, seed):
         "primary_method": primary,
         "baseline": baseline,
         "primary_block_bootstrap_all": _block_comparison(
-            rows, primary, baseline, n_boot=n_boot, seed=seed
+            rows,
+            primary,
+            baseline,
+            n_boot=n_boot,
+            n_permutations=n_permutations,
+            seed=seed,
         ),
         "primary_block_bootstrap_validation": _block_comparison(
-            validation, primary, baseline, n_boot=n_boot, seed=seed + 10
+            validation,
+            primary,
+            baseline,
+            n_boot=n_boot,
+            n_permutations=n_permutations,
+            seed=seed + 10,
         ),
         "primary_block_bootstrap_hard_validation": _block_comparison(
-            hard_validation, primary, baseline, n_boot=n_boot, seed=seed + 20
+            hard_validation,
+            primary,
+            baseline,
+            n_boot=n_boot,
+            n_permutations=n_permutations,
+            seed=seed + 20,
         ),
         "primary_formula_effects_validation": _formula_effects(
             validation, primary, baseline
@@ -165,6 +212,7 @@ def main():
     p.add_argument("--hard-static-threshold", type=float, default=0.8)
     p.add_argument("--validation-fraction", type=float, default=0.5)
     p.add_argument("--bootstrap", type=int, default=5000)
+    p.add_argument("--permutations", type=int, default=200000)
     p.add_argument("--seed", type=int, default=271828)
     args = p.parse_args()
 
@@ -193,6 +241,7 @@ def main():
         "protocol": {
             "split_unit": "molecular formula (all adducts and queries for a formula stay together)",
             "block_bootstrap_unit": "molecular formula",
+            "block_randomization_unit": "molecular formula",
             "validation_fraction": args.validation_fraction,
             "split_salt": SPLIT_SALT,
             "split_algorithm": "SHA-256(salt + unit-separator + formula), first 64 bits",
@@ -206,6 +255,10 @@ def main():
                 "The validation split, split salt, primary methods, baselines, and weights are fixed in code. "
                 "Validation outcomes must not be used to retune this run."
             ),
+            "inference_guardrail": (
+                "Primary uncertainty is clustered by molecular formula. The block bootstrap and the independent "
+                "two-sided whole-formula sign-flip/randomization test are both reported."
+            ),
         },
         "trajectory_exact_condition": _section(
             trows,
@@ -213,6 +266,7 @@ def main():
             PRIMARY_TRAJECTORY,
             "static_best",
             n_boot=args.bootstrap,
+            n_permutations=args.permutations,
             seed=args.seed,
         ),
         "merged_energy": _section(
@@ -221,6 +275,7 @@ def main():
             PRIMARY_MERGED,
             "static_best",
             n_boot=args.bootstrap,
+            n_permutations=args.permutations,
             seed=args.seed + 1000,
         ),
         "interpretation_guardrail": (
