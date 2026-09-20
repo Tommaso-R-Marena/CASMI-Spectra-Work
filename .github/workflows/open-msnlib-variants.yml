@@ -1,0 +1,42 @@
+name: open-msnlib-variants
+
+on:
+  push:
+    branches: [msnlib-open-data]
+    paths:
+      - 'src/qfd/dynamic_variants.py'
+      - 'src/qfd/msnlib_variants.py'
+      - 'scripts/run_msnlib_variants.py'
+      - 'tests/test_dynamic_variants.py'
+      - '.github/workflows/open-msnlib-variants.yml'
+  workflow_dispatch:
+
+jobs:
+  variants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install project
+        run: python -m pip install -e .
+      - name: Run tests
+        run: PYTHONPATH=src pytest -q tests/test_dynamic_variants.py
+      - name: Download open MSnLib OTAVA positive library
+        run: |
+          curl -L --fail --retry 3 --retry-delay 2 \
+            'https://zenodo.org/records/21105617/files/20241003_otavapep_pos_ms2.json?download=1' \
+            -o /tmp/msnlib.jsonl
+      - name: Run censor-aware and merged-energy variants
+        run: |
+          python scripts/run_msnlib_variants.py /tmp/msnlib.jsonl \
+            --out-dir results/msnlib_variants \
+            --bootstrap 2000 \
+            --hard-static-threshold 0.8
+      - name: Show summary
+        run: cat results/msnlib_variants/summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msnlib-variant-results
+          path: results/msnlib_variants/
