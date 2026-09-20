@@ -1,0 +1,77 @@
+name: casmi2022-cfm-audit
+
+on:
+  push:
+    branches: [casmi2022-external-audit]
+    paths:
+      - 'scripts/audit_casmi_cfm_coverage_generic.py'
+      - '.github/workflows/casmi2022-cfm-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: casmi2022-cfm-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install audit dependencies
+        run: python -m pip install pandas numpy
+      - name: Download and verify CASMI 2022 processed benchmark
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/casmi2022 /tmp/cfm results/casmi2022_external
+          curl -L --fail --retry 3 --retry-delay 2 \
+            'https://zenodo.org/records/8399738/files/proc_casmi_2022.tgz?download=1' \
+            -o /tmp/proc_casmi_2022.tgz
+          echo '82364fafaff0ead065c0b7680da34215  /tmp/proc_casmi_2022.tgz' | md5sum -c -
+          tar -xzf /tmp/proc_casmi_2022.tgz -C /tmp/casmi2022
+      - name: Download and verify CASMI 2022 CFM predictions
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 --retry-delay 3 \
+            'https://zenodo.org/records/8399738/files/cfm.tgz?download=1' \
+            -o /tmp/cfm.tgz
+          echo '9091cbc446124dc947cb2a7b01fe9c98  /tmp/cfm.tgz' | md5sum -c -
+          CFM_MEMBER="$(tar -tzf /tmp/cfm.tgz | grep -E '(^|/)casmi22_spec_df\.pkl$' | head -n1)"
+          test -n "$CFM_MEMBER"
+          tar -xzf /tmp/cfm.tgz -C /tmp/cfm "$CFM_MEMBER"
+      - name: Audit external coverage
+        run: |
+          python scripts/audit_casmi_cfm_coverage_generic.py /tmp/casmi2022 /tmp/cfm \
+            --cfm-file casmi22_spec_df.pkl --label 'CASMI 2022' \
+            --output results/casmi2022_external/coverage.json
+      - name: Persist compact audit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p benchmark_results
+          cp results/casmi2022_external/coverage.json benchmark_results/casmi2022_cfm_coverage.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add benchmark_results/casmi2022_cfm_coverage.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record CASMI 2022 CFM coverage audit'
+            git pull --rebase origin casmi2022-external-audit
+            git push origin HEAD:casmi2022-external-audit
+          fi
+      - name: Upload audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casmi2022-cfm-audit
+          path: results/casmi2022_external/
+          if-no-files-found: ignore
