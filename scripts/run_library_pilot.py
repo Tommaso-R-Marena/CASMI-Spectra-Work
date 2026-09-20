@@ -37,6 +37,7 @@ def main():
     p.add_argument("--transform", choices=["sqrt", "log1p", "none"], default="sqrt")
     p.add_argument("--max-energy-gap-ev", type=float, default=10.0)
     p.add_argument("--bootstrap", type=int, default=2000)
+    p.add_argument("--hard-static-threshold", type=float, default=0.8)
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args()
 
@@ -96,6 +97,21 @@ def main():
                 **paired_bootstrap_delta(vals, baseline, n_boot=args.bootstrap, seed=args.seed),
                 **paired_win_loss_tie(vals, baseline),
             }
+
+    hard_rows = [r for r in per_query if r.get("best_decoy_static_score", float("-inf")) >= args.hard_static_threshold]
+    hard_summary = summarize_results(hard_rows)
+    hard_summary["threshold"] = args.hard_static_threshold
+    if hard_rows:
+        baseline = [r["rr_static_best"] for r in hard_rows]
+        hard_summary["paired_vs_static"] = {}
+        for mode in modes[1:]:
+            vals = [r[f"rr_{mode}"] for r in hard_rows]
+            hard_summary["paired_vs_static"][mode] = {
+                **paired_bootstrap_delta(vals, baseline, n_boot=args.bootstrap, seed=args.seed),
+                **paired_win_loss_tie(vals, baseline),
+            }
+    summary["hard_static_subset"] = hard_summary
+
     summary["config"] = {
         "ingest_lib": args.ingest_lib,
         "max_structures": args.max_structures,
@@ -106,6 +122,7 @@ def main():
         "max_peaks": args.max_peaks,
         "transform": args.transform,
         "max_energy_gap_ev": score_gap,
+        "hard_static_threshold": args.hard_static_threshold,
         "seed": args.seed,
     }
     summary["cohort"] = {
