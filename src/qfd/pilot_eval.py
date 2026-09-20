@@ -34,17 +34,10 @@ def rows_to_records(rows, *, intensity_floor=0.001, max_peaks=128, transform="sq
         if len(mz) == 0:
             continue
         e = float(energies[0])
-        view = SpectrumView.make(
-            mz, it, [e], adduct=row.get("adduct"),
-            base_peak_intensity=row.get("base_peak_intensity"),
-        )
+        view = SpectrumView.make(mz, it, [e], adduct=row.get("adduct"), base_peak_intensity=row.get("base_peak_intensity"))
         out.append(PilotRecord(
-            inchikey14=str(row["inchikey14"]),
-            molecular_formula=str(row["molecular_formula"]),
-            spectrum_id=str(row["spectrum_id"]),
-            adduct=str(row.get("adduct")),
-            energy_ev=e,
-            view=view,
+            inchikey14=str(row["inchikey14"]), molecular_formula=str(row["molecular_formula"]),
+            spectrum_id=str(row["spectrum_id"]), adduct=str(row.get("adduct")), energy_ev=e, view=view,
         ))
     return out
 
@@ -84,10 +77,7 @@ def split_query_reference_replicates(records: list[PilotRecord], *, min_energies
         by_energy = defaultdict(list)
         for r in group:
             by_energy[r.energy_ev].append(r)
-        replicated = {
-            e: sorted(vals, key=lambda x: x.spectrum_id)
-            for e, vals in by_energy.items() if len(vals) >= 2
-        }
+        replicated = {e: sorted(vals, key=lambda x: x.spectrum_id) for e, vals in by_energy.items() if len(vals) >= 2}
         if len(replicated) < min_energies:
             continue
         q = []
@@ -97,23 +87,14 @@ def split_query_reference_replicates(records: list[PilotRecord], *, min_energies
             q.append(vals[0].view)
             ref.append(vals[1].view)
         formula = group[0].molecular_formula
-        candidate = {
-            "formula": formula, "adduct": adduct, "query": q, "reference": ref,
-            "n_energies": len(replicated), "split_mode": "replicate",
-        }
+        candidate = {"formula": formula, "adduct": adduct, "query": q, "reference": ref, "n_energies": len(replicated), "split_mode": "replicate"}
         prev = result.get(key)
         if prev is None or (len(q) + len(ref), str(adduct)) > (len(prev["query"]) + len(prev["reference"]), str(prev["adduct"])):
             result[key] = candidate
     return result
 
 
-def evaluate_formula_candidates(
-    groups: dict,
-    *,
-    modes=("static_best", "joint_energy", "two_energy_qfd"),
-    k=25,
-    max_energy_gap_ev=10.0,
-):
+def evaluate_formula_candidates(groups: dict, *, modes=("static_best", "joint_energy", "two_energy_qfd"), k=25, max_energy_gap_ev=10.0):
     """Evaluate every query only against structures sharing its molecular formula."""
     by_formula = defaultdict(list)
     for key, g in groups.items():
@@ -130,6 +111,11 @@ def evaluate_formula_candidates(
             result[f"rr_{mode}"] = reciprocal_rank_at_k(ranked, truth, k=k)
             result[f"rank_{mode}"] = ranked.index(truth) + 1 if truth in ranked else math.inf
             result[f"score_{mode}"] = scores.get(truth, -math.inf)
+            if mode == "static_best":
+                decoys = [score for cid, score in scores.items() if cid != truth and math.isfinite(score)]
+                best_decoy = max(decoys) if decoys else -math.inf
+                result["best_decoy_static_score"] = best_decoy
+                result["static_margin"] = result[f"score_{mode}"] - best_decoy
         rows.append(result)
     return rows
 
