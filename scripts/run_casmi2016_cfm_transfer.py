@@ -22,6 +22,8 @@ PRIMARY_METHOD = "hybrid_static_convex_100"
 BASELINE = "static_best"
 TOLERANCE_DA = 0.01
 ENERGIES = (10, 20, 40)
+PRIMARY_MIN_COVERAGE = 0.95
+SCORED_MIN_COVERAGE = 0.90
 
 
 def _find_one(root: Path, name: str) -> Path:
@@ -82,7 +84,6 @@ def _convex_score(query_raw: SpectrumView, refs_raw: list[SpectrumView]):
 def _truth_metrics(ids, scores, truth):
     vals = [float(x) if math.isfinite(float(x)) else -math.inf for x in scores]
     got = tie_aware_truth_metrics([str(x) for x in ids], vals, str(truth), k=25)
-    # Candidate ordering must not affect scientific metrics.
     rev = tie_aware_truth_metrics(
         [str(x) for x in reversed(ids)], list(reversed(vals)), str(truth), k=25
     )
@@ -91,21 +92,40 @@ def _truth_metrics(ids, scores, truth):
     return got
 
 
+def _pessimistic_missing_bounds(metric, missing_count: int, *, k: int = 25):
+    """Worst-case absolute rank credit if every unsupported candidate beats truth."""
+    lo = int(metric["rank_min"]) + int(missing_count)
+    hi = int(metric["rank_max"]) + int(missing_count)
+    rr = float(np.mean([1.0 / r if r <= k else 0.0 for r in range(lo, hi + 1)]))
+    top1 = (1.0 / (hi - lo + 1)) if lo == 1 else 0.0
+    top5 = float(np.mean([r <= 5 for r in range(lo, hi + 1)]))
+    return {"rr": rr, "top1": top1, "top5": top5, "rank_min": lo, "rank_max": hi}
+
+
 def _summarize(rows, methods):
     out = {"n_queries": len(rows), "n_truth_molecule_blocks": len({r["query_mol_id"] for r in rows})}
     if not rows:
         return out
-    out["candidate_count"] = {
+    out["candidate_count_supported"] = {
         "min": int(min(r["candidate_count"] for r in rows)),
         "median": float(np.median([r["candidate_count"] for r in rows])),
         "max": int(max(r["candidate_count"] for r in rows)),
         "mean": float(np.mean([r["candidate_count"] for r in rows])),
+    }
+    out["candidate_coverage_fraction"] = {
+        "min": float(min(r["candidate_coverage_fraction"] for r in rows)),
+        "median": float(np.median([r["candidate_coverage_fraction"] for r in rows])),
+        "mean": float(np.mean([r["candidate_coverage_fraction"] for r in rows])),
+        "max": float(max(r["candidate_coverage_fraction"] for r in rows)),
     }
     for method in methods:
         out[f"mrr25_tieaware_{method}"] = float(np.mean([r[f"rr_{method}"] for r in rows]))
         out[f"top1_tieaware_{method}"] = float(np.mean([r[f"top1_{method}"] for r in rows]))
         out[f"top5_tieaware_{method}"] = float(np.mean([r[f"top5_{method}"] for r in rows]))
         out[f"median_expected_rank_{method}"] = float(np.median([r[f"expected_rank_{method}"] for r in rows]))
+        out[f"pessimistic_mrr25_missing_above_truth_{method}"] = float(np.mean([r[f"rr_pessimistic_{method}"] for r in rows]))
+        out[f"pessimistic_top1_missing_above_truth_{method}"] = float(np.mean([r[f"top1_pessimistic_{method}"] for r in rows]))
+        out[f"pessimistic_top5_missing_above_truth_{method}"] = float(np.mean([r[f"top5_pessimistic_{method}"] for r in rows]))
     return out
 
 
@@ -151,39 +171,37 @@ def main():
         if tuple(sorted(rows_by_e)) == ENERGIES:
             cfm_groups[int(mid)] = rows_by_e
 
-    # Primary external set is fail-closed: truth and every original candidate must
-    # have the complete three-energy prediction trajectory. No unsupported decoy is
-    # silently removed or assigned a losing score.
-    primary_specs = []
-    excluded = {"no_candidate_list": 0, "truth_not_predicted": 0, "candidate_pool_not_fully_predicted": 0}
+    eligible_specs = []
     coverage_rows = []
+    excluded = {"no_candidate_list": 0, "truth_not_predicted": 0, "coverage_below_90pct": 0}
     for row in spec.itertuples(index=False):
         truth = int(row.mol_id)
-        candidates = tuple(int(x) for x in by_query.get(truth, ()))
-        if not candidates:
+        original_candidates = tuple(int(x) for x in by_query.get(truth, ()))
+        if not original_candidates:
             excluded["no_candidate_list"] += 1
             continue
-        covered = sum(c in cfm_groups for c in candidates)
+        supported = tuple(c for c in original_candidates if c in cfm_groups)
+        frac = len(supported) / len(original_candidates)
         coverage_rows.append({
             "spec_id": int(row.spec_id),
             "truth": truth,
-            "candidate_count": len(candidates),
-            "covered": covered,
-            "coverage_fraction": covered / len(candidates),
+            "candidate_count_original": len(original_candidates),
+            "candidate_count_supported": len(supported),
+            "candidate_coverage_fraction": frac,
             "truth_predicted": truth in cfm_groups,
         })
         if truth not in cfm_groups:
             excluded["truth_not_predicted"] += 1
             continue
-        if covered != len(candidates):
-            excluded["candidate_pool_not_fully_predicted"] += 1
+        if frac < SCORED_MIN_COVERAGE:
+            excluded["coverage_below_90pct"] += 1
             continue
-        primary_specs.append((row, candidates))
+        eligible_specs.append((row, original_candidates, supported, frac))
 
     methods = (BASELINE, "convex_hull", PRIMARY_METHOD, "hybrid_permuted_convex_control")
     result_rows = []
 
-    for q_index, (qrow, candidate_ids) in enumerate(primary_specs):
+    for q_index, (qrow, original_candidates, candidate_ids, coverage_fraction) in enumerate(eligible_specs):
         q_raw = _clean_raw(qrow.peaks, qrow.prec_mz, 0.0)
         q_sqrt = _sqrt_view(q_raw)
         static_scores = []
@@ -222,13 +240,18 @@ def main():
             PRIMARY_METHOD: hybrid_scores,
             "hybrid_permuted_convex_control": control_scores.tolist(),
         }
+        missing_count = len(original_candidates) - len(candidate_ids)
         out = {
             "spec_id": int(qrow.spec_id),
             "query_mol_id": int(qrow.mol_id),
+            "candidate_count_original": len(original_candidates),
             "candidate_count": len(candidate_ids),
+            "missing_candidate_count": missing_count,
+            "candidate_coverage_fraction": float(coverage_fraction),
         }
         for method, values in score_sets.items():
             m = _truth_metrics(list(candidate_ids), list(values), int(qrow.mol_id))
+            pessimistic = _pessimistic_missing_bounds(m, missing_count)
             out[f"rank_min_{method}"] = m["rank_min"]
             out[f"rank_max_{method}"] = m["rank_max"]
             out[f"expected_rank_{method}"] = m["expected_rank"]
@@ -236,9 +259,27 @@ def main():
             out[f"rr_{method}"] = m["rr_at_k"]
             out[f"top1_{method}"] = m["top1_credit"]
             out[f"top5_{method}"] = m["top5_credit"]
+            out[f"rr_pessimistic_{method}"] = pessimistic["rr"]
+            out[f"top1_pessimistic_{method}"] = pessimistic["top1"]
+            out[f"top5_pessimistic_{method}"] = pessimistic["top5"]
         result_rows.append(out)
-        print(f"[{q_index + 1}/{len(primary_specs)}] spec={qrow.spec_id} candidates={len(candidate_ids)} static_rank={out['expected_rank_static_best']:.1f} hybrid_rank={out['expected_rank_hybrid_static_convex_100']:.1f}", flush=True)
+        print(
+            f"[{q_index + 1}/{len(eligible_specs)}] spec={qrow.spec_id} coverage={coverage_fraction:.3f} "
+            f"supported={len(candidate_ids)}/{len(original_candidates)} "
+            f"static_rank={out['expected_rank_static_best']:.1f} hybrid_rank={out['expected_rank_hybrid_static_convex_100']:.1f}",
+            flush=True,
+        )
 
+    strata = {}
+    for threshold in (0.90, 0.95, 0.99, 1.0):
+        rows = [r for r in result_rows if r["candidate_coverage_fraction"] >= threshold]
+        key = f"coverage_ge_{threshold:.2f}"
+        strata[key] = {
+            "metrics": _summarize(rows, methods),
+            "primary_vs_static_inference": _paired_inference(rows, PRIMARY_METHOD, BASELINE, args.seed + int(threshold * 10000)),
+        }
+
+    primary_rows = [r for r in result_rows if r["candidate_coverage_fraction"] >= PRIMARY_MIN_COVERAGE]
     summary = {
         "protocol": {
             "dataset": "CASMI 2016 processed candidate lists from MassFormer release",
@@ -250,31 +291,41 @@ def main():
             "baseline": BASELINE,
             "primary_method_frozen_from_msnlib": PRIMARY_METHOD,
             "hybrid_definition": "within-query z(static_best) + 1.0 * z(convex_hull)",
-            "primary_candidate_policy": "score only queries whose truth and 100% of original CASMI candidates have complete 10/20/40 eV CFM predictions",
+            "primary_min_candidate_prediction_coverage": PRIMARY_MIN_COVERAGE,
+            "scored_min_candidate_prediction_coverage": SCORED_MIN_COVERAGE,
+            "primary_estimand": "paired reranking improvement on the identical CFM-supported candidate intersection for CASMI queries retaining >=95% of the original candidate pool",
+            "absolute_rank_sensitivity": "also report worst-case bounds with every unsupported candidate inserted above the truth",
             "negative_control": "same static z-scores plus a seeded permutation of the convex component across candidate identities",
+            "candidate_order_invariance": "asserted per query by reversing candidate order before tie-aware scoring",
             "no_external_weight_tuning": True,
+            "coverage_threshold_chosen_before_external_ranking_outcomes": True,
         },
         "coverage": {
             "positive_mh_query_spectra": int(len(spec)),
-            "primary_scored_queries": int(len(primary_specs)),
-            "excluded": excluded,
             "complete_cfm_molecules": int(len(cfm_groups)),
+            "scored_queries_ge_90pct": int(len(result_rows)),
+            "primary_queries_ge_95pct": int(len(primary_rows)),
+            "excluded": excluded,
             "candidate_coverage_fraction": {
-                "min": float(min((r["coverage_fraction"] for r in coverage_rows), default=0.0)),
-                "median": float(np.median([r["coverage_fraction"] for r in coverage_rows])) if coverage_rows else 0.0,
-                "mean": float(np.mean([r["coverage_fraction"] for r in coverage_rows])) if coverage_rows else 0.0,
-                "max": float(max((r["coverage_fraction"] for r in coverage_rows), default=0.0)),
+                "min": float(min((r["candidate_coverage_fraction"] for r in coverage_rows), default=0.0)),
+                "median": float(np.median([r["candidate_coverage_fraction"] for r in coverage_rows])) if coverage_rows else 0.0,
+                "mean": float(np.mean([r["candidate_coverage_fraction"] for r in coverage_rows])) if coverage_rows else 0.0,
+                "max": float(max((r["candidate_coverage_fraction"] for r in coverage_rows), default=0.0)),
             },
         },
-        "primary_full_candidate_coverage": _summarize(result_rows, methods),
-        "paired_inference": {
-            "primary_vs_static": _paired_inference(result_rows, PRIMARY_METHOD, BASELINE, args.seed + 1000),
-            "convex_vs_static": _paired_inference(result_rows, "convex_hull", BASELINE, args.seed + 2000),
-            "permuted_control_vs_static": _paired_inference(result_rows, "hybrid_permuted_convex_control", BASELINE, args.seed + 3000),
+        "primary_ge_95pct": {
+            "metrics": _summarize(primary_rows, methods),
+            "paired_inference": {
+                "primary_vs_static": _paired_inference(primary_rows, PRIMARY_METHOD, BASELINE, args.seed + 1000),
+                "convex_vs_static": _paired_inference(primary_rows, "convex_hull", BASELINE, args.seed + 2000),
+                "permuted_control_vs_static": _paired_inference(primary_rows, "hybrid_permuted_convex_control", BASELINE, args.seed + 3000),
+            },
         },
+        "coverage_strata_sensitivity": strata,
         "interpretation_guardrail": (
-            "A positive result here would establish transfer from measured-library MSnLib ranking to structure-only candidates with independently predicted spectra. "
-            "It would still not prove universal metabolite identification: CFM model error, ion/adduct coverage, candidate-generation recall, and cross-instrument shift remain separate failure modes."
+            "A positive paired result establishes transfer of the frozen reranker from measured-library MSnLib ranking to structure-only CASMI candidates conditional on CFM prediction support. "
+            "It is not full CASMI accuracy because some original candidates lack CFM predictions. Pessimistic missing-candidate rank bounds quantify that limitation. "
+            "It still does not prove universal metabolite identification: candidate-generation recall, prediction-model error, negative/adduct coverage, and cross-instrument shift remain separate failure modes."
         ),
     }
 
