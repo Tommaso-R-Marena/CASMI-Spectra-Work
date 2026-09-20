@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/qfd/**'
       - 'scripts/run_msnlib_open_pilot.py'
+      - 'scripts/audit_msnlib_slots.py'
       - 'pyproject.toml'
       - '.github/workflows/open-msnlib-pilot.yml'
   workflow_dispatch:
@@ -36,6 +37,10 @@ jobs:
           test -s /tmp/msnlib.jsonl
           sha256sum /tmp/msnlib.jsonl | tee results/msnlib_open/input_sha256.txt
           wc -l /tmp/msnlib.jsonl | tee results/msnlib_open/input_line_count.txt
+      - name: Audit acquisition slots
+        run: |
+          python scripts/audit_msnlib_slots.py /tmp/msnlib.jsonl \
+            --output results/msnlib_open/slot_audit.json
       - name: Run real-data QFD and merged-energy pilots
         shell: bash
         run: |
