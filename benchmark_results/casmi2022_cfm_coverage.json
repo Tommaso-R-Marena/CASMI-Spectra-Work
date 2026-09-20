@@ -1,0 +1,1406 @@
+{
+  "label": "CASMI 2022",
+  "prediction_file": "casmi22_spec_df.pkl",
+  "protocol": "positive [M+H]+; complete CFM means exactly 10/20/40 eV",
+  "casmi": {
+    "all_spectra": 229,
+    "positive_mh_spectra": 170,
+    "unique_positive_truths": 169,
+    "candidate_links": 1354118,
+    "candidate_molecules": 1194335
+  },
+  "cfm": {
+    "rows": 3570996,
+    "complete_molecules": 1190332,
+    "candidate_molecule_coverage": 0.9966483440575717
+  },
+  "truth_complete_fraction": 1.0,
+  "threshold_counts": {
+    "1.0": 168,
+    "0.99": 169,
+    "0.95": 169,
+    "0.9": 169
+  },
+  "coverage_quantiles": {
+    "min": 0.6278838997767303,
+    "q05": 1.0,
+    "q25": 1.0,
+    "median": 1.0,
+    "q75": 1.0,
+    "q95": 1.0,
+    "max": 1.0,
+    "mean": 0.997810391427406
+  },
+  "candidate_count_quantiles": {
+    "min": 103.0,
+    "q05": 480.8500000000001,
+    "q25": 3026.25,
+    "median": 7127.0,
+    "q75": 9146.0,
+    "q95": 9642.35,
+    "max": 9778.0,
+    "mean": 6248.782352941176
+  },
+  "per_spectrum": [
+    {
+      "spec_id": 0,
+      "truth": 1196787,
+      "candidate_count": 1241,
+      "covered": 1241,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 3,
+      "truth": 1196790,
+      "candidate_count": 8524,
+      "covered": 8524,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 4,
+      "truth": 1196791,
+      "candidate_count": 7594,
+      "covered": 7594,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 5,
+      "truth": 1196792,
+      "candidate_count": 1074,
+      "covered": 1074,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 6,
+      "truth": 1196793,
+      "candidate_count": 1524,
+      "covered": 1524,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 7,
+      "truth": 1196794,
+      "candidate_count": 7016,
+      "covered": 7016,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 9,
+      "truth": 1196796,
+      "candidate_count": 8632,
+      "covered": 8632,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 10,
+      "truth": 1196797,
+      "candidate_count": 2796,
+      "covered": 2796,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 11,
+      "truth": 1196798,
+      "candidate_count": 6368,
+      "covered": 6368,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 12,
+      "truth": 1196799,
+      "candidate_count": 9462,
+      "covered": 9462,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 15,
+      "truth": 1196802,
+      "candidate_count": 4775,
+      "covered": 4775,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 16,
+      "truth": 1196803,
+      "candidate_count": 103,
+      "covered": 103,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 17,
+      "truth": 1196804,
+      "candidate_count": 9564,
+      "covered": 9564,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 18,
+      "truth": 1196806,
+      "candidate_count": 6548,
+      "covered": 6548,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 21,
+      "truth": 1196809,
+      "candidate_count": 5615,
+      "covered": 5615,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 22,
+      "truth": 1196810,
+      "candidate_count": 6293,
+      "covered": 6293,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 23,
+      "truth": 1196811,
+      "candidate_count": 5745,
+      "covered": 5745,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 24,
+      "truth": 1196813,
+      "candidate_count": 5010,
+      "covered": 5010,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 25,
+      "truth": 1196814,
+      "candidate_count": 9778,
+      "covered": 9778,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 26,
+      "truth": 1196815,
+      "candidate_count": 8521,
+      "covered": 8520,
+      "coverage_fraction": 0.9998826428822908,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 27,
+      "truth": 1196816,
+      "candidate_count": 3327,
+      "covered": 3327,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 29,
+      "truth": 1196818,
+      "candidate_count": 8062,
+      "covered": 5062,
+      "coverage_fraction": 0.6278838997767303,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 31,
+      "truth": 1196820,
+      "candidate_count": 9668,
+      "covered": 9668,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 34,
+      "truth": 1196823,
+      "candidate_count": 457,
+      "covered": 457,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 35,
+      "truth": 1196824,
+      "candidate_count": 233,
+      "covered": 233,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 37,
+      "truth": 1196826,
+      "candidate_count": 8957,
+      "covered": 8957,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 38,
+      "truth": 1196827,
+      "candidate_count": 9532,
+      "covered": 9532,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 39,
+      "truth": 1196829,
+      "candidate_count": 859,
+      "covered": 859,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 40,
+      "truth": 1196830,
+      "candidate_count": 7695,
+      "covered": 7695,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 41,
+      "truth": 1196831,
+      "candidate_count": 5158,
+      "covered": 5158,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 42,
+      "truth": 1196832,
+      "candidate_count": 9484,
+      "covered": 9484,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 43,
+      "truth": 1196833,
+      "candidate_count": 8937,
+      "covered": 8937,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 46,
+      "truth": 1196837,
+      "candidate_count": 959,
+      "covered": 959,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 48,
+      "truth": 1196839,
+      "candidate_count": 9066,
+      "covered": 9066,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 50,
+      "truth": 1196841,
+      "candidate_count": 1506,
+      "covered": 1506,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 51,
+      "truth": 1196842,
+      "candidate_count": 558,
+      "covered": 558,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 53,
+      "truth": 1196844,
+      "candidate_count": 1206,
+      "covered": 1206,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 54,
+      "truth": 1196845,
+      "candidate_count": 6814,
+      "covered": 6814,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 55,
+      "truth": 1196846,
+      "candidate_count": 9288,
+      "covered": 9288,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 56,
+      "truth": 1196828,
+      "candidate_count": 9532,
+      "covered": 9532,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 58,
+      "truth": 1196849,
+      "candidate_count": 2999,
+      "covered": 2999,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 59,
+      "truth": 1196850,
+      "candidate_count": 9219,
+      "covered": 9219,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 60,
+      "truth": 1196851,
+      "candidate_count": 7090,
+      "covered": 7090,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 61,
+      "truth": 1196853,
+      "candidate_count": 8026,
+      "covered": 8026,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 64,
+      "truth": 1196856,
+      "candidate_count": 817,
+      "covered": 817,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 65,
+      "truth": 1196857,
+      "candidate_count": 9590,
+      "covered": 9590,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 68,
+      "truth": 1196860,
+      "candidate_count": 1511,
+      "covered": 1511,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 69,
+      "truth": 1196861,
+      "candidate_count": 9556,
+      "covered": 9556,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 70,
+      "truth": 1196862,
+      "candidate_count": 8926,
+      "covered": 8926,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 71,
+      "truth": 1196863,
+      "candidate_count": 9485,
+      "covered": 9485,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 74,
+      "truth": 1196866,
+      "candidate_count": 7251,
+      "covered": 7251,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 75,
+      "truth": 1196867,
+      "candidate_count": 4497,
+      "covered": 4497,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 76,
+      "truth": 1196812,
+      "candidate_count": 5745,
+      "covered": 5745,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 77,
+      "truth": 1196868,
+      "candidate_count": 8719,
+      "covered": 8719,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 78,
+      "truth": 1196869,
+      "candidate_count": 787,
+      "covered": 787,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 79,
+      "truth": 1196870,
+      "candidate_count": 7821,
+      "covered": 7821,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 80,
+      "truth": 1196871,
+      "candidate_count": 7809,
+      "covered": 7809,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 82,
+      "truth": 1196873,
+      "candidate_count": 5788,
+      "covered": 5788,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 83,
+      "truth": 1196874,
+      "candidate_count": 9564,
+      "covered": 9564,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 84,
+      "truth": 1196852,
+      "candidate_count": 7090,
+      "covered": 7090,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 87,
+      "truth": 1196876,
+      "candidate_count": 2560,
+      "covered": 2560,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 88,
+      "truth": 1196877,
+      "candidate_count": 6054,
+      "covered": 6054,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 89,
+      "truth": 1196805,
+      "candidate_count": 9564,
+      "covered": 9564,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 90,
+      "truth": 1196878,
+      "candidate_count": 1959,
+      "covered": 1959,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 93,
+      "truth": 1196881,
+      "candidate_count": 9460,
+      "covered": 9460,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 94,
+      "truth": 1196882,
+      "candidate_count": 347,
+      "covered": 347,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 95,
+      "truth": 1196883,
+      "candidate_count": 1876,
+      "covered": 1876,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 96,
+      "truth": 1196884,
+      "candidate_count": 6683,
+      "covered": 6683,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 98,
+      "truth": 1196886,
+      "candidate_count": 9270,
+      "covered": 9270,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 99,
+      "truth": 1196887,
+      "candidate_count": 6863,
+      "covered": 6863,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 100,
+      "truth": 1196888,
+      "candidate_count": 6530,
+      "covered": 6530,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 101,
+      "truth": 1196890,
+      "candidate_count": 7838,
+      "covered": 7838,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 102,
+      "truth": 1196891,
+      "candidate_count": 4859,
+      "covered": 4859,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 104,
+      "truth": 1196893,
+      "candidate_count": 8559,
+      "covered": 8559,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 105,
+      "truth": 1196894,
+      "candidate_count": 9237,
+      "covered": 9237,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 106,
+      "truth": 1196895,
+      "candidate_count": 9490,
+      "covered": 9490,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 107,
+      "truth": 1196896,
+      "candidate_count": 8301,
+      "covered": 8301,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 108,
+      "truth": 1196899,
+      "candidate_count": 9738,
+      "covered": 9738,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 109,
+      "truth": 1196900,
+      "candidate_count": 4863,
+      "covered": 4863,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 111,
+      "truth": 1196902,
+      "candidate_count": 2744,
+      "covered": 2744,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 112,
+      "truth": 1196903,
+      "candidate_count": 9092,
+      "covered": 9092,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 113,
+      "truth": 1196905,
+      "candidate_count": 7164,
+      "covered": 7164,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 114,
+      "truth": 1196906,
+      "candidate_count": 689,
+      "covered": 689,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 115,
+      "truth": 1196907,
+      "candidate_count": 1876,
+      "covered": 1876,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 116,
+      "truth": 1196909,
+      "candidate_count": 9725,
+      "covered": 9725,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 119,
+      "truth": 1196912,
+      "candidate_count": 9424,
+      "covered": 9424,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 120,
+      "truth": 1196913,
+      "candidate_count": 9633,
+      "covered": 9633,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 121,
+      "truth": 1196918,
+      "candidate_count": 9371,
+      "covered": 9371,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 122,
+      "truth": 1196919,
+      "candidate_count": 3108,
+      "covered": 3108,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 123,
+      "truth": 1196920,
+      "candidate_count": 2103,
+      "covered": 2103,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 126,
+      "truth": 1196923,
+      "candidate_count": 9036,
+      "covered": 9036,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 127,
+      "truth": 1196924,
+      "candidate_count": 1657,
+      "covered": 1657,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 128,
+      "truth": 1196925,
+      "candidate_count": 9700,
+      "covered": 9700,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 129,
+      "truth": 1196897,
+      "candidate_count": 8301,
+      "covered": 8301,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 130,
+      "truth": 1196926,
+      "candidate_count": 9113,
+      "covered": 9113,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 131,
+      "truth": 1196928,
+      "candidate_count": 9650,
+      "covered": 9650,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 132,
+      "truth": 1196929,
+      "candidate_count": 9018,
+      "covered": 9018,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 135,
+      "truth": 1196933,
+      "candidate_count": 6577,
+      "covered": 6577,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 136,
+      "truth": 1196934,
+      "candidate_count": 9626,
+      "covered": 9626,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 137,
+      "truth": 1196935,
+      "candidate_count": 8771,
+      "covered": 8771,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 138,
+      "truth": 1196936,
+      "candidate_count": 8939,
+      "covered": 8939,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 139,
+      "truth": 1196937,
+      "candidate_count": 316,
+      "covered": 316,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 140,
+      "truth": 1196939,
+      "candidate_count": 9134,
+      "covered": 9134,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 142,
+      "truth": 1196942,
+      "candidate_count": 9236,
+      "covered": 9236,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 143,
+      "truth": 1196943,
+      "candidate_count": 8691,
+      "covered": 8691,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 144,
+      "truth": 1196944,
+      "candidate_count": 9540,
+      "covered": 9540,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 145,
+      "truth": 1196938,
+      "candidate_count": 316,
+      "covered": 316,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 146,
+      "truth": 1196945,
+      "candidate_count": 1277,
+      "covered": 1277,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 147,
+      "truth": 1196946,
+      "candidate_count": 4034,
+      "covered": 4034,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 149,
+      "truth": 1196948,
+      "candidate_count": 9235,
+      "covered": 9235,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 150,
+      "truth": 1196949,
+      "candidate_count": 7703,
+      "covered": 7703,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 151,
+      "truth": 1196950,
+      "candidate_count": 1793,
+      "covered": 1793,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 155,
+      "truth": 1196954,
+      "candidate_count": 9273,
+      "covered": 9273,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 156,
+      "truth": 1196955,
+      "candidate_count": 8995,
+      "covered": 8995,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 157,
+      "truth": 1196956,
+      "candidate_count": 6956,
+      "covered": 6956,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 158,
+      "truth": 1196958,
+      "candidate_count": 3729,
+      "covered": 3729,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 159,
+      "truth": 1196914,
+      "candidate_count": 9633,
+      "covered": 9633,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 163,
+      "truth": 1196962,
+      "candidate_count": 361,
+      "covered": 361,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 164,
+      "truth": 1196963,
+      "candidate_count": 9013,
+      "covered": 9013,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 165,
+      "truth": 1196937,
+      "candidate_count": 316,
+      "covered": 316,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 166,
+      "truth": 1196964,
+      "candidate_count": 6879,
+      "covered": 6879,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 169,
+      "truth": 1196967,
+      "candidate_count": 4670,
+      "covered": 4670,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 170,
+      "truth": 1196898,
+      "candidate_count": 8301,
+      "covered": 8301,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 171,
+      "truth": 1196968,
+      "candidate_count": 1728,
+      "covered": 1728,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 172,
+      "truth": 1196879,
+      "candidate_count": 1959,
+      "covered": 1959,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 173,
+      "truth": 1196969,
+      "candidate_count": 8918,
+      "covered": 8918,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 176,
+      "truth": 1196972,
+      "candidate_count": 2390,
+      "covered": 2390,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 177,
+      "truth": 1196973,
+      "candidate_count": 336,
+      "covered": 336,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 178,
+      "truth": 1196974,
+      "candidate_count": 2608,
+      "covered": 2608,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 179,
+      "truth": 1196975,
+      "candidate_count": 8960,
+      "covered": 8960,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 180,
+      "truth": 1196976,
+      "candidate_count": 6386,
+      "covered": 6386,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 181,
+      "truth": 1196915,
+      "candidate_count": 9633,
+      "covered": 9633,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 185,
+      "truth": 1196979,
+      "candidate_count": 6320,
+      "covered": 6320,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 186,
+      "truth": 1196980,
+      "candidate_count": 9661,
+      "covered": 9661,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 187,
+      "truth": 1196981,
+      "candidate_count": 8416,
+      "covered": 8416,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 188,
+      "truth": 1196982,
+      "candidate_count": 6641,
+      "covered": 6641,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 189,
+      "truth": 1196983,
+      "candidate_count": 3839,
+      "covered": 3839,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 190,
+      "truth": 1196940,
+      "candidate_count": 9134,
+      "covered": 9134,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 191,
+      "truth": 1196908,
+      "candidate_count": 1876,
+      "covered": 1876,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 192,
+      "truth": 1196984,
+      "candidate_count": 735,
+      "covered": 735,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 193,
+      "truth": 1196985,
+      "candidate_count": 7937,
+      "covered": 7937,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 194,
+      "truth": 1196986,
+      "candidate_count": 9378,
+      "covered": 9378,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 195,
+      "truth": 1196987,
+      "candidate_count": 1274,
+      "covered": 1274,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 196,
+      "truth": 1196988,
+      "candidate_count": 4522,
+      "covered": 4522,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 199,
+      "truth": 1196991,
+      "candidate_count": 4447,
+      "covered": 4447,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 200,
+      "truth": 1196992,
+      "candidate_count": 510,
+      "covered": 510,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 201,
+      "truth": 1196993,
+      "candidate_count": 7033,
+      "covered": 7033,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 205,
+      "truth": 1196996,
+      "candidate_count": 9363,
+      "covered": 9363,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 206,
+      "truth": 1196927,
+      "candidate_count": 9113,
+      "covered": 9113,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 207,
+      "truth": 1196997,
+      "candidate_count": 5970,
+      "covered": 5970,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 208,
+      "truth": 1196916,
+      "candidate_count": 9633,
+      "covered": 9633,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 209,
+      "truth": 1196904,
+      "candidate_count": 9092,
+      "covered": 9092,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 210,
+      "truth": 1196998,
+      "candidate_count": 6490,
+      "covered": 6490,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 211,
+      "truth": 1196999,
+      "candidate_count": 9668,
+      "covered": 9668,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 212,
+      "truth": 1197000,
+      "candidate_count": 9580,
+      "covered": 9580,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 213,
+      "truth": 1197001,
+      "candidate_count": 9069,
+      "covered": 9069,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 214,
+      "truth": 1197002,
+      "candidate_count": 1846,
+      "covered": 1846,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 215,
+      "truth": 1197003,
+      "candidate_count": 9452,
+      "covered": 9452,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 216,
+      "truth": 1197004,
+      "candidate_count": 5420,
+      "covered": 5420,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 218,
+      "truth": 1197006,
+      "candidate_count": 7363,
+      "covered": 7363,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 219,
+      "truth": 1197007,
+      "candidate_count": 3155,
+      "covered": 3155,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 220,
+      "truth": 1196917,
+      "candidate_count": 9633,
+      "covered": 9633,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 221,
+      "truth": 1197008,
+      "candidate_count": 9150,
+      "covered": 9150,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 222,
+      "truth": 1197009,
+      "candidate_count": 9240,
+      "covered": 9240,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 223,
+      "truth": 1197010,
+      "candidate_count": 9012,
+      "covered": 9012,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 224,
+      "truth": 1197011,
+      "candidate_count": 2730,
+      "covered": 2730,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 225,
+      "truth": 1197012,
+      "candidate_count": 6157,
+      "covered": 6157,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 226,
+      "truth": 1197013,
+      "candidate_count": 9691,
+      "covered": 9691,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 227,
+      "truth": 1197014,
+      "candidate_count": 1329,
+      "covered": 1329,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    },
+    {
+      "spec_id": 228,
+      "truth": 1196957,
+      "candidate_count": 6956,
+      "covered": 6956,
+      "coverage_fraction": 1.0,
+      "truth_complete": true
+    }
+  ]
+}
