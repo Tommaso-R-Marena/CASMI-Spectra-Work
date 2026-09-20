@@ -21,7 +21,9 @@ def mrr_at_k(rankings: Iterable[Sequence[str]], truths: Iterable[str], k: int = 
 def rank_by_score(candidate_ids: Sequence[str], scores: Sequence[float], *, higher_is_better: bool = True):
     if len(candidate_ids) != len(scores):
         raise ValueError("candidate_ids and scores must have equal length")
-    order = np.argsort(np.asarray(scores, dtype=float), kind="stable")
-    if higher_is_better:
-        order = order[::-1]
+    values = np.asarray(scores, dtype=float)
+    # Sort in the requested direction directly rather than sorting ascending and
+    # reversing the indices. Reversing a stable ascending sort also reverses
+    # exact ties, which makes tie order depend on an implementation accident.
+    order = np.argsort(-values if higher_is_better else values, kind="stable")
     return [candidate_ids[int(i)] for i in order]
