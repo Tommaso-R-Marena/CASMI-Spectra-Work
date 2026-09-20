@@ -10,6 +10,9 @@ on:
       - '.github/workflows/open-msnlib-group-validation.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 concurrency:
   group: open-msnlib-group-validation-${{ github.ref }}
   cancel-in-progress: true
@@ -49,6 +52,19 @@ jobs:
             --hard-static-threshold 0.8 2>&1 | tee results/msnlib_group_validation/run.log
       - name: Show summary
         run: cat results/msnlib_group_validation/summary.json
+      - name: Persist compact benchmark summary
+        run: |
+          mkdir -p benchmark_results
+          cp results/msnlib_group_validation/summary.json benchmark_results/msnlib_group_validation_summary.json
+          cp results/msnlib_group_validation/input_sha256.txt benchmark_results/msnlib_group_validation_input_sha256.txt
+          cp results/msnlib_group_validation/input_line_count.txt benchmark_results/msnlib_group_validation_input_line_count.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add benchmark_results/msnlib_group_validation_*.txt benchmark_results/msnlib_group_validation_summary.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record MSnLib formula-heldout benchmark result'
+            git push
+          fi
       - name: Upload validation results and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
