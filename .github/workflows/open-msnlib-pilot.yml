@@ -1,0 +1,35 @@
+name: open-msnlib-pilot
+
+on:
+  push:
+    branches: [msnlib-open-data]
+  workflow_dispatch:
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install project
+        run: python -m pip install -e .
+      - name: Download open MSnLib OTAVA positive library
+        run: |
+          curl -L --fail --retry 3 --retry-delay 2 \
+            'https://zenodo.org/records/21105617/files/20241003_otavapep_pos_ms2.json?download=1' \
+            -o /tmp/msnlib.jsonl
+          ls -lh /tmp/msnlib.jsonl
+      - name: Run real-data QFD and merged-energy pilots
+        run: |
+          python scripts/run_msnlib_open_pilot.py /tmp/msnlib.jsonl \
+            --out-dir results/msnlib_open \
+            --bootstrap 1000 \
+            --hard-static-threshold 0.8
+      - name: Show summary
+        run: cat results/msnlib_open/summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msnlib-open-pilot-results
+          path: results/msnlib_open/
