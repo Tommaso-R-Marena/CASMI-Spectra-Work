@@ -4,6 +4,7 @@ from collections.abc import Mapping
 import math
 
 from .metrics import rank_by_score
+from .qfd_profile import two_energy_qfd_score
 from .spectra import matched_cosine
 from .trajectory import SpectrumView, joint_energy_score
 
@@ -38,8 +39,13 @@ def rank_library(
                 query, refs, tolerance_da=tolerance_da,
                 max_energy_gap_ev=max_energy_gap_ev, require_same_adduct=True,
             )
+        elif mode == "two_energy_qfd":
+            score = two_energy_qfd_score(
+                query, refs, tolerance_da=tolerance_da,
+                max_energy_gap_ev=max_energy_gap_ev,
+            )
         else:
-            raise ValueError("mode must be 'static_best' or 'joint_energy'")
+            raise ValueError("mode must be 'static_best', 'joint_energy', or 'two_energy_qfd'")
         if math.isnan(score):
             score = -math.inf
         ids.append(str(structure_id))
