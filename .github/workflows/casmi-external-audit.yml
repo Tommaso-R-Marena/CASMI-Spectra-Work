@@ -1,0 +1,64 @@
+name: casmi-external-audit
+
+on:
+  push:
+    branches: [casmi-external-generalization]
+    paths:
+      - 'scripts/inspect_massformer_casmi.py'
+      - '.github/workflows/casmi-external-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: casmi-external-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  inspect-casmi2016:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install inspection dependencies
+        run: python -m pip install pandas
+      - name: Download and verify processed CASMI 2016 benchmark
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/casmi2016 results/casmi_external
+          curl -L --fail --retry 3 --retry-delay 2 \
+            'https://zenodo.org/records/8399738/files/proc_casmi_2016.tgz?download=1' \
+            -o /tmp/proc_casmi_2016.tgz
+          echo 'c24bae2a10e929d8a1570ae810d45278  /tmp/proc_casmi_2016.tgz' | md5sum -c -
+          md5sum /tmp/proc_casmi_2016.tgz | tee results/casmi_external/casmi2016_archive_md5.txt
+          tar -xzf /tmp/proc_casmi_2016.tgz -C /tmp/casmi2016
+          find /tmp/casmi2016 -maxdepth 4 -type f -printf '%P\t%s\n' | sort | tee results/casmi_external/casmi2016_file_listing.tsv
+      - name: Inspect processed data schema
+        run: |
+          python scripts/inspect_massformer_casmi.py /tmp/casmi2016 \
+            --output results/casmi_external/casmi2016_schema.json
+      - name: Persist external-data audit
+        run: |
+          mkdir -p benchmark_results
+          cp results/casmi_external/casmi2016_schema.json benchmark_results/casmi2016_external_schema.json
+          cp results/casmi_external/casmi2016_archive_md5.txt benchmark_results/casmi2016_external_archive_md5.txt
+          cp results/casmi_external/casmi2016_file_listing.tsv benchmark_results/casmi2016_external_file_listing.tsv
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add benchmark_results/casmi2016_external_*
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record CASMI 2016 external dataset audit'
+            git push
+          fi
+      - name: Upload audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casmi2016-external-audit
+          path: results/casmi_external/
+          if-no-files-found: ignore
