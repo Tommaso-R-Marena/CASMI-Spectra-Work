@@ -31,6 +31,23 @@ def paired_bootstrap_delta(a, b, *, n_boot: int = 2000, seed: int = 0, alpha: fl
     }
 
 
+def _validated_paired_blocks(a, b, blocks):
+    x = np.asarray(a, dtype=float)
+    y = np.asarray(b, dtype=float)
+    block_labels = list(blocks)
+    if x.shape != y.shape or x.ndim != 1 or len(x) == 0:
+        raise ValueError("a and b must be nonempty one-dimensional arrays of equal length")
+    if len(block_labels) != len(x):
+        raise ValueError("blocks must have the same length as a and b")
+    by_block = defaultdict(list)
+    for i, label in enumerate(block_labels):
+        by_block[label].append(i)
+    unique_blocks = list(by_block)
+    if not unique_blocks:
+        raise ValueError("at least one block is required")
+    return x, y, by_block, unique_blocks
+
+
 def paired_block_bootstrap_delta(
     a,
     b,
@@ -47,24 +64,11 @@ def paired_block_bootstrap_delta(
     each sampled block. This preserves within-block dependence while retaining the
     query-weighted estimand used by the benchmark summaries.
     """
-    x = np.asarray(a, dtype=float)
-    y = np.asarray(b, dtype=float)
-    block_labels = list(blocks)
-    if x.shape != y.shape or x.ndim != 1 or len(x) == 0:
-        raise ValueError("a and b must be nonempty one-dimensional arrays of equal length")
-    if len(block_labels) != len(x):
-        raise ValueError("blocks must have the same length as a and b")
+    x, y, by_block, unique_blocks = _validated_paired_blocks(a, b, blocks)
     if n_boot < 1:
         raise ValueError("n_boot must be positive")
     if not 0 < alpha < 1:
         raise ValueError("alpha must be between 0 and 1")
-
-    by_block = defaultdict(list)
-    for i, label in enumerate(block_labels):
-        by_block[label].append(i)
-    unique_blocks = list(by_block)
-    if not unique_blocks:
-        raise ValueError("at least one block is required")
 
     d = x - y
     block_deltas = [d[np.asarray(by_block[label], dtype=int)] for label in unique_blocks]
@@ -86,6 +90,90 @@ def paired_block_bootstrap_delta(
         "seed": int(seed),
         "n_boot": int(n_boot),
         "resampling_unit": "block",
+    }
+
+
+def paired_block_signflip_test(
+    a,
+    b,
+    blocks,
+    *,
+    seed: int = 0,
+    n_permutations: int = 200_000,
+    exact_max_blocks: int = 20,
+    atol: float = 1e-15,
+):
+    """Two-sided paired randomization test that flips whole blocks together.
+
+    Under the sharp paired null, exchanging method labels within an independent block
+    negates every query-level difference in that block.  The test statistic remains
+    the benchmark's query-weighted mean difference, so blocks with more queries retain
+    their contribution to the reported estimand.  For at most ``exact_max_blocks``
+    blocks every sign assignment is enumerated; otherwise a seeded Monte Carlo test is
+    used.  This is a robustness test complementary to the block bootstrap CI.
+    """
+    x, y, by_block, unique_blocks = _validated_paired_blocks(a, b, blocks)
+    if n_permutations < 1:
+        raise ValueError("n_permutations must be positive")
+    if exact_max_blocks < 1:
+        raise ValueError("exact_max_blocks must be positive")
+
+    d = x - y
+    block_sums = np.asarray(
+        [d[np.asarray(by_block[label], dtype=int)].sum() for label in unique_blocks],
+        dtype=float,
+    )
+    n = len(d)
+    n_blocks = len(block_sums)
+    observed = float(d.mean())
+    threshold = abs(observed) - atol
+
+    if n_blocks <= exact_max_blocks:
+        total = 1 << n_blocks
+        extreme = 0
+        # Chunk enumeration keeps memory bounded while remaining exact.
+        chunk = 65_536
+        bit_positions = np.arange(n_blocks, dtype=np.uint64)
+        for start in range(0, total, chunk):
+            stop = min(start + chunk, total)
+            ids = np.arange(start, stop, dtype=np.uint64)[:, None]
+            bits = ((ids >> bit_positions) & 1).astype(np.float64)
+            signs = bits * 2.0 - 1.0
+            stats = (signs @ block_sums) / float(n)
+            extreme += int(np.sum(np.abs(stats) >= threshold))
+        p_value = extreme / float(total)
+        return {
+            "delta": observed,
+            "p_value_two_sided": float(p_value),
+            "n": int(n),
+            "n_blocks": int(n_blocks),
+            "mode": "exact",
+            "n_sign_assignments": int(total),
+            "extreme": int(extreme),
+        }
+
+    rng = np.random.default_rng(seed)
+    extreme = 0
+    done = 0
+    batch = 10_000
+    while done < n_permutations:
+        m = min(batch, n_permutations - done)
+        signs = rng.integers(0, 2, size=(m, n_blocks), dtype=np.int8).astype(np.float64)
+        signs = signs * 2.0 - 1.0
+        stats = (signs @ block_sums) / float(n)
+        extreme += int(np.sum(np.abs(stats) >= threshold))
+        done += m
+    # Add-one correction gives a valid finite Monte Carlo randomization p-value.
+    p_value = (extreme + 1.0) / (n_permutations + 1.0)
+    return {
+        "delta": observed,
+        "p_value_two_sided": float(p_value),
+        "n": int(n),
+        "n_blocks": int(n_blocks),
+        "mode": "monte_carlo",
+        "n_permutations": int(n_permutations),
+        "seed": int(seed),
+        "extreme": int(extreme),
     }
 
 
