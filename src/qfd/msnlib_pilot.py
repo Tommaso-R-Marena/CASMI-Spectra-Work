@@ -24,49 +24,66 @@ def _clean_view(rec: MSnLibRecord, *, transform: str) -> SpectrumView:
     )
 
 
-def _put_unique_energy(bucket, energy: float, rec: MSnLibRecord, *, label: str, key):
-    """Insert a single-energy record without silently discarding a replicate.
-
-    The released MSnLib views are expected to provide at most one record for each
-    (connectivity key, adduct, merge type, collision energy) slot used by these
-    pilots.  Silent dict overwrite would make results depend on JSONL record order,
-    so fail loudly if that invariant is violated.
-    """
-    if energy in bucket:
-        prior = bucket[energy]
-        raise ValueError(
-            f"duplicate {label} record for inchikey14={key[0]!r}, adduct={key[1]!r}, "
-            f"energy={energy}: spectrum_id={prior.spectrum_id!r} and {rec.spectrum_id!r}"
-        )
-    bucket[energy] = rec
-
-
 def index_records(records: list[MSnLibRecord]):
+    """Index MSnLib without collapsing stereochemical identity or choosing replicates.
+
+    Full InChIKey + adduct is the benchmark identity. The 14-character InChIKey
+    connectivity block is intentionally not used as an identity because distinct
+    full InChIKeys in the release can share that block. If a full-identity slot has
+    repeated records, the group is marked ambiguous and downstream benchmarks exclude
+    the whole group rather than silently selecting one acquisition.
+    """
     groups = defaultdict(lambda: {
-        "formula": None, "single_best": {}, "same_energy": {},
-        "all_energies": [], "pseudo_ms2": [],
+        "formula": None,
+        "inchikey14": None,
+        "single_best": {},
+        "same_energy": {},
+        "all_energies": [],
+        "pseudo_ms2": [],
+        "ambiguous_slots": [],
     })
+    slots = defaultdict(list)
+
     for r in records:
-        key = (r.inchikey14, r.adduct)
+        key = (r.full_inchikey, r.adduct)
         g = groups[key]
         if g["formula"] is None:
             g["formula"] = r.molecular_formula
+            g["inchikey14"] = r.inchikey14
         elif g["formula"] != r.molecular_formula:
             raise ValueError(
-                f"inconsistent formulas for inchikey14={key[0]!r}, adduct={key[1]!r}: "
+                f"inconsistent formulas for full_inchikey={key[0]!r}, adduct={key[1]!r}: "
                 f"{g['formula']!r} vs {r.molecular_formula!r}"
             )
+        slots[(key, r.merge_type, tuple(r.collision_energies))].append(r)
+
+    for (key, merge_type, energies), recs in slots.items():
+        g = groups[key]
+        if len(recs) != 1:
+            g["ambiguous_slots"].append({
+                "merge_type": merge_type,
+                "collision_energies": energies,
+                "count": len(recs),
+                "spectrum_ids": tuple(r.spectrum_id for r in recs),
+            })
+            continue
+        r = recs[0]
         if r.is_single_energy:
             e = r.collision_energies[0]
-            if r.merge_type == "SINGLE_BEST_SCAN":
-                _put_unique_energy(g["single_best"], e, r, label="SINGLE_BEST_SCAN", key=key)
-            elif r.merge_type == "SAME_ENERGY":
-                _put_unique_energy(g["same_energy"], e, r, label="SAME_ENERGY", key=key)
-        elif r.merge_type == "ALL_ENERGIES":
+            if merge_type == "SINGLE_BEST_SCAN":
+                g["single_best"][e] = r
+            elif merge_type == "SAME_ENERGY":
+                g["same_energy"][e] = r
+        elif merge_type == "ALL_ENERGIES":
             g["all_energies"].append(r)
-        elif r.merge_type == "ALL_MSN_TO_PSEUDO_MS2":
+        elif merge_type == "ALL_MSN_TO_PSEUDO_MS2":
             g["pseudo_ms2"].append(r)
+
     return groups
+
+
+def _unambiguous_groups(groups):
+    return {k: g for k, g in groups.items() if not g["ambiguous_slots"]}
 
 
 def _summarize(rows, modes):
@@ -91,14 +108,17 @@ def evaluate_same_energy_trajectory(records: list[MSnLibRecord], *, hard_static_
     SAME_ENERGY spectra are derived from replicate acquisitions, so this is a
     consistency/ranking test, not independent or structure-held-out validation.
     """
-    groups = index_records(records)
+    indexed = index_records(records)
+    groups = _unambiguous_groups(indexed)
     eligible = {}
     for skey, g in groups.items():
         common = sorted(set(g["single_best"]) & set(g["same_energy"]))
         if len(common) < 2:
             continue
         eligible[skey] = {
-            "formula": g["formula"], "energies": common,
+            "formula": g["formula"],
+            "inchikey14": g["inchikey14"],
+            "energies": common,
             "query_raw": [_clean_view(g["single_best"][e], transform="none") for e in common],
             "ref_raw": [_clean_view(g["same_energy"][e], transform="none") for e in common],
             "query_sqrt": [_clean_view(g["single_best"][e], transform="sqrt") for e in common],
@@ -117,10 +137,11 @@ def evaluate_same_energy_trajectory(records: list[MSnLibRecord], *, hard_static_
         ])
         if len(candidates) < 2:
             continue
-        # Restrict every candidate reference to the exact query-energy set.
+
         def select(views):
             by_e = {v.collision_energy_ev[0]: v for v in views}
             return [by_e[e] for e in g["energies"]]
+
         static_lib = {cid[0]: select(eligible[cid]["ref_sqrt"]) for cid in candidates}
         raw_lib = {cid[0]: select(eligible[cid]["ref_raw"]) for cid in candidates}
         ranked_static, scores_static = rank_library(g["query_sqrt"], static_lib, mode="static_best")
@@ -138,9 +159,14 @@ def evaluate_same_energy_trajectory(records: list[MSnLibRecord], *, hard_static_
         decoys = [v for k, v in scores_static.items() if k != truth_id and math.isfinite(v)]
         best_decoy = max(decoys) if decoys else -math.inf
         row = {
-            "inchikey14": truth_id, "formula": g["formula"], "adduct": truth[1],
-            "candidate_count": len(candidates), "n_energies": len(g["energies"]),
-            "energies": g["energies"], "best_decoy_static_score": best_decoy,
+            "full_inchikey": truth_id,
+            "inchikey14": g["inchikey14"],
+            "formula": g["formula"],
+            "adduct": truth[1],
+            "candidate_count": len(candidates),
+            "n_energies": len(g["energies"]),
+            "energies": g["energies"],
+            "best_decoy_static_score": best_decoy,
             "hard_static": best_decoy >= hard_static_threshold,
         }
         for mode, ranked, scoremap in [
@@ -156,7 +182,11 @@ def evaluate_same_energy_trajectory(records: list[MSnLibRecord], *, hard_static_
     return {
         "all": _summarize(rows, modes),
         "hard": _summarize([r for r in rows if r["hard_static"]], modes),
-        "rows": rows, "eligible_structure_adduct_groups": len(eligible),
+        "rows": rows,
+        "eligible_structure_adduct_groups": len(eligible),
+        "indexed_full_identity_groups": len(indexed),
+        "excluded_ambiguous_full_identity_groups": len(indexed) - len(groups),
+        "identity_definition": "full InChIKey + adduct",
         "caveat": "SAME_ENERGY references are derived from replicate acquisitions; this is a Class-1 consistency/ranking test, not structure-held-out generalization.",
     }
 
@@ -166,9 +196,11 @@ def evaluate_merged_convex(records: list[MSnLibRecord], *, hard_static_threshold
 
     Candidate references are SINGLE_BEST_SCAN spectra at every collision energy
     listed by the merged query. Static-best and convex-hull scores use identical
-    candidate sets for each query.
+    candidate sets for each query. Ambiguous repeated-acquisition identities are
+    excluded rather than resolved by arbitrary record order.
     """
-    groups = index_records(records)
+    indexed = index_records(records)
+    groups = _unambiguous_groups(indexed)
     by_formula_adduct = defaultdict(list)
     for skey, g in groups.items():
         by_formula_adduct[(g["formula"], skey[1])].append(skey)
@@ -199,8 +231,12 @@ def evaluate_merged_convex(records: list[MSnLibRecord], *, hard_static_threshold
             decoys = [v for k, v in static_scores.items() if k != truth_id and math.isfinite(v)]
             best_decoy = max(decoys) if decoys else -math.inf
             row = {
-                "inchikey14": truth_id, "formula": g["formula"], "adduct": truth[1],
-                "candidate_count": len(candidate_keys), "energies": list(wanted),
+                "full_inchikey": truth_id,
+                "inchikey14": g["inchikey14"],
+                "formula": g["formula"],
+                "adduct": truth[1],
+                "candidate_count": len(candidate_keys),
+                "energies": list(wanted),
                 "best_decoy_static_score": best_decoy,
                 "hard_static": best_decoy >= hard_static_threshold,
                 "rank_static_best": ranked_static.index(truth_id) + 1,
@@ -216,5 +252,8 @@ def evaluate_merged_convex(records: list[MSnLibRecord], *, hard_static_threshold
         "all": _summarize(rows, modes),
         "hard": _summarize([r for r in rows if r["hard_static"]], modes),
         "rows": rows,
+        "indexed_full_identity_groups": len(indexed),
+        "excluded_ambiguous_full_identity_groups": len(indexed) - len(groups),
+        "identity_definition": "full InChIKey + adduct",
         "caveat": "ALL_ENERGIES queries are constructed from the same released acquisition family as the single-energy references; this tests the mixture geometry and Class-1 ranking, not de novo generalization.",
     }
