@@ -20,72 +20,82 @@ jobs:
             'https://zenodo.org/records/21105617/files/20241003_otavapep_pos_ms2.json?download=1' \
             -o /tmp/msnlib.jsonl
           ls -lh /tmp/msnlib.jsonl
-      - name: Inspect JSONL schema
+      - name: Audit dynamic cohorts
         run: |
           python - <<'PY'
           import json
           from collections import Counter, defaultdict
           from pathlib import Path
 
-          path=Path('/tmp/msnlib.jsonl')
           records=[]
-          total=0
-          bad=0
-          with path.open() as f:
+          with Path('/tmp/msnlib.jsonl').open() as f:
               for line in f:
                   line=line.strip()
-                  if not line:
-                      continue
-                  try:
-                      rec=json.loads(line)
-                  except Exception:
-                      bad += 1
-                      continue
-                  total += 1
-                  if len(records)<1000:
-                      records.append(rec)
+                  if line:
+                      records.append(json.loads(line))
+
+          merge_types=Counter(str(r.get('merge_type')) for r in records)
+          acquisitions=Counter(str(r.get('acquisition')) for r in records)
+          single=[r for r in records if isinstance(r.get('collision_energy'),(int,float))]
+          merged=[r for r in records if isinstance(r.get('collision_energy'),list) and len(r['collision_energy'])>1]
+          single_by_structure=defaultdict(list)
+          merged_by_structure=defaultdict(list)
+          formulas=defaultdict(set)
+          same_energy_reps=defaultdict(Counter)
+          for r in records:
+              key=(r.get('inchikey') or '')[:14]
+              formula=r.get('formula')
+              adduct=r.get('adduct')
+              if key and formula:
+                  formulas[formula].add(key)
+              ce=r.get('collision_energy')
+              if isinstance(ce,(int,float)) and key:
+                  single_by_structure[(key,adduct)].append(float(ce))
+                  same_energy_reps[(key,adduct)][float(ce)] += 1
+              elif isinstance(ce,list) and len(ce)>1 and key:
+                  merged_by_structure[(key,adduct)].append(tuple(float(x) for x in ce))
+
+          energy_hist=Counter(float(r['collision_energy']) for r in single)
+          single_energy_counts=Counter(len(set(es)) for es in single_by_structure.values())
+          formula_structure_counts=Counter(len(v) for v in formulas.values())
+          same_formula_structures=sum(len(v) for v in formulas.values() if len(v)>=2)
+          structures_2e=sum(len(set(es))>=2 for es in single_by_structure.values())
+          structures_3e=sum(len(set(es))>=3 for es in single_by_structure.values())
+          structures_4e=sum(len(set(es))>=4 for es in single_by_structure.values())
+          structures_replicated_2e=sum(sum(c>=2 for c in cnt.values())>=2 for cnt in same_energy_reps.values())
+          merged_with_all_constituents=0
+          merged_with_2plus_constituents=0
+          for skey, mixtures in merged_by_structure.items():
+              avail=set(single_by_structure.get(skey,[]))
+              for mix in mixtures:
+                  n=sum(e in avail for e in set(mix))
+                  merged_with_2plus_constituents += n>=2
+                  merged_with_all_constituents += n==len(set(mix))
 
           report={
-              'format':'jsonl',
-              'file_bytes':path.stat().st_size,
-              'record_count':total,
-              'bad_lines':bad,
+              'records':len(records),
+              'unique_inchikey14':len({(r.get('inchikey') or '')[:14] for r in records if r.get('inchikey')}),
+              'unique_formulas':len(formulas),
+              'single_energy_records':len(single),
+              'merged_energy_records':len(merged),
+              'merge_type_counts':dict(merge_types.most_common()),
+              'acquisition_counts':dict(acquisitions.most_common()),
+              'single_energy_histogram':{str(k):v for k,v in sorted(energy_hist.items())},
+              'structure_adduct_groups_ge2_single_energies':structures_2e,
+              'structure_adduct_groups_ge3_single_energies':structures_3e,
+              'structure_adduct_groups_ge4_single_energies':structures_4e,
+              'structure_adduct_groups_with_replicates_at_ge2_energies':structures_replicated_2e,
+              'same_formula_structures_in_competitive_formula_groups':same_formula_structures,
+              'formula_group_size_histogram':{str(k):v for k,v in sorted(formula_structure_counts.items())},
+              'merged_records_with_ge2_single_energy_constituents':merged_with_2plus_constituents,
+              'merged_records_with_all_single_energy_constituents':merged_with_all_constituents,
+              'example_single':[{k:r.get(k) for k in ['inchikey','formula','adduct','collision_energy','merge_type','acquisition','num_peaks']} for r in single[:5]],
+              'example_merged':[{k:r.get(k) for k in ['inchikey','formula','adduct','collision_energy','merge_type','acquisition','num_peaks']} for r in merged[:5]],
           }
-          if records and isinstance(records[0],dict):
-              report['first_record_keys']=sorted(map(str,records[0].keys()))
-              report['first_record_types']={str(k):type(v).__name__ for k,v in records[0].items()}
-              key_counts=Counter()
-              interesting=defaultdict(list)
-              spectype=Counter()
-              energy_values=Counter()
-              for rec in records:
-                  if not isinstance(rec,dict):
-                      continue
-                  key_counts.update(rec.keys())
-                  for k,v in rec.items():
-                      sk=str(k); lk=sk.lower()
-                      if any(t in lk for t in ['spect','collision','energy','smile','inchi','formula','precursor','peak','mz','adduct','compound','id']):
-                          if len(interesting[sk])<8:
-                              if isinstance(v,(str,int,float,bool,type(None))):
-                                  interesting[sk].append(v)
-                              elif isinstance(v,list):
-                                  interesting[sk].append({'type':'list','len':len(v),'first':v[:3]})
-                              elif isinstance(v,dict):
-                                  interesting[sk].append({'type':'dict','keys':list(v)[:20]})
-                              else:
-                                  interesting[sk].append(type(v).__name__)
-                      if lk=='spectype' or 'spectype' in lk:
-                          spectype[str(v)] += 1
-                      if 'collision' in lk and 'energy' in lk:
-                          energy_values[str(v)] += 1
-              report['key_counts_first1000']={str(k):int(v) for k,v in key_counts.most_common()}
-              report['interesting_examples']=dict(interesting)
-              report['spectype_counts_first1000']=dict(spectype.most_common(30))
-              report['collision_energy_examples_first1000']=dict(energy_values.most_common(30))
-          Path('schema_report.json').write_text(json.dumps(report,indent=2,default=str)+'\n')
+          Path('msnlib_audit.json').write_text(json.dumps(report,indent=2,default=str)+'\n')
           print(json.dumps(report,indent=2,default=str))
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: msnlib-schema-report
-          path: schema_report.json
+          name: msnlib-audit
+          path: msnlib_audit.json
