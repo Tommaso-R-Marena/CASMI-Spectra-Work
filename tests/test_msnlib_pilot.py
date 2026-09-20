@@ -1,5 +1,7 @@
+import pytest
+
 from qfd.msnlib import record_from_json
-from qfd.msnlib_pilot import evaluate_merged_convex, evaluate_same_energy_trajectory
+from qfd.msnlib_pilot import evaluate_merged_convex, evaluate_same_energy_trajectory, index_records
 
 
 def rec(key, formula, energy, intensities, merge_type, name="x"):
@@ -15,6 +17,22 @@ def rec(key, formula, energy, intensities, merge_type, name="x"):
         "peaks": [[50.0, intensities[0]], [100.0, intensities[1]], [150.0, intensities[2]]],
     }
     return record_from_json(obj)
+
+
+def test_index_records_rejects_duplicate_single_energy_slots():
+    A = "AAAAAAAAAAAAAA"
+    a = rec(A, "C6H6", 20.0, [100, 50, 25], "SINGLE_BEST_SCAN")
+    b = rec(A, "C6H6", 20.0, [90, 60, 25], "SINGLE_BEST_SCAN")
+    with pytest.raises(ValueError, match="duplicate SINGLE_BEST_SCAN"):
+        index_records([a, b])
+
+
+def test_index_records_rejects_formula_inconsistency():
+    A = "AAAAAAAAAAAAAA"
+    a = rec(A, "C6H6", 20.0, [100, 50, 25], "SINGLE_BEST_SCAN")
+    b = rec(A, "C7H8", 40.0, [90, 60, 25], "SINGLE_BEST_SCAN")
+    with pytest.raises(ValueError, match="inconsistent formulas"):
+        index_records([a, b])
 
 
 def test_same_energy_trajectory_qfd_uses_dynamics():
