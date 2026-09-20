@@ -1,0 +1,65 @@
+name: open-msnlib-smoke
+
+on:
+  push:
+    branches: [open-msnlib-smoke]
+    paths: [.github/workflows/open-msnlib-smoke.yml]
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download small open MSnLib library
+        run: |
+          curl -L --fail --retry 3 --retry-delay 2 \
+            'https://zenodo.org/records/21105617/files/20241003_otavapep_pos_ms2.json?download=1' \
+            -o /tmp/msnlib.json
+          ls -lh /tmp/msnlib.json
+      - name: Inspect schema
+        run: |
+          python - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+
+          path=Path('/tmp/msnlib.json')
+          obj=json.loads(path.read_text())
+          report={'top_type':type(obj).__name__,'file_bytes':path.stat().st_size}
+          if isinstance(obj,list):
+              records=obj
+          elif isinstance(obj,dict):
+              report['top_keys']=sorted(map(str,obj.keys()))[:100]
+              # Pick the largest list-valued top-level field if present.
+              lists=[(k,v) for k,v in obj.items() if isinstance(v,list)]
+              records=max(lists,key=lambda kv:len(kv[1]))[1] if lists else []
+              report['record_container']=max(lists,key=lambda kv:len(kv[1]))[0] if lists else None
+          else:
+              records=[]
+          report['record_count']=len(records)
+          if records and isinstance(records[0],dict):
+              report['first_record_keys']=sorted(map(str,records[0].keys()))
+              key_counts=Counter()
+              interesting={}
+              for rec in records[:500]:
+                  if not isinstance(rec,dict): continue
+                  key_counts.update(rec.keys())
+                  for k,v in rec.items():
+                      lk=str(k).lower()
+                      if any(t in lk for t in ['spect','collision','energy','smile','inchi','formula','precursor','peak','mz','adduct']):
+                          bucket=interesting.setdefault(str(k),[])
+                          if len(bucket)<5:
+                              bucket.append(v if isinstance(v,(str,int,float,bool,type(None))) else type(v).__name__)
+              report['key_counts_first500']={str(k):int(v) for k,v in key_counts.most_common()}
+              report['interesting_examples']=interesting
+          Path('schema_report.json').write_text(json.dumps(report,indent=2,default=str)+'\n')
+          print(json.dumps(report,indent=2,default=str))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msnlib-schema-report
+          path: schema_report.json
