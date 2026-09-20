@@ -3,6 +3,7 @@ import math
 import numpy as np
 import pytest
 
+from qfd.benchmark import rank_library
 from qfd.casmi_schema import is_merged_energy, normalize_energy_list, reconstruct_raw_intensities, validate_peak_arrays
 from qfd.metrics import reciprocal_rank_at_k, mrr_at_k, rank_by_score
 from qfd.splits import assert_no_structure_leakage, structure_holdout
@@ -71,6 +72,17 @@ def test_joint_energy_score_prefers_condition_consistent_candidate():
     b = joint_energy_score(q, swapped, max_energy_gap_ev=0)
     assert a > b
     assert math.isclose(a, 1.0)
+
+
+def test_library_ranking_exposes_dynamic_advantage():
+    q = [_s([50, 100], [1, 0], 20), _s([50, 100], [0, 1], 40)]
+    library = {
+        "correct": [_s([50, 100], [1, 0], 20), _s([50, 100], [0, 1], 40)],
+        "static-decoy": [_s([50, 100], [1, 0], 20), _s([50, 100], [1, 0], 40)],
+    }
+    ranked, scores = rank_library(q, library, mode="joint_energy", max_energy_gap_ev=0)
+    assert ranked[0] == "correct"
+    assert scores["correct"] > scores["static-decoy"]
 
 
 @pytest.mark.skipif(importlib.util.find_spec("polars") is None or importlib.util.find_spec("pyarrow") is None, reason="optional parquet deps unavailable")
