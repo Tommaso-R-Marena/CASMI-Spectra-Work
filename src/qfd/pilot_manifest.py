@@ -18,12 +18,14 @@ def build_pilot_manifest(
     min_spectra: int = 3,
     min_energies: int = 2,
     max_structures: int = 5000,
+    min_formula_structures: int = 2,
 ):
     """Select a deterministic, instrument-consistent multi-energy pilot cohort.
 
     Selection is performed from metadata only. A qualifying structure/adduct group
     must have single-energy observations at at least ``min_energies`` distinct eV
-    values and at least ``min_spectra`` spectra.
+    values and at least ``min_spectra`` spectra. The returned table contains one
+    row per qualifying structure/adduct group, sorted deterministically.
     """
     pl = _polars()
     lf = (
@@ -47,7 +49,9 @@ def build_pilot_manifest(
             pl.col("energy_ev").max().alias("energy_max_ev"),
         ])
         .filter((pl.col("n_spectra") >= min_spectra) & (pl.col("n_energies") >= min_energies))
-        .sort(["inchikey14", "adduct", "ionization_mode"])
+        .with_columns(pl.col("inchikey14").n_unique().over("molecular_formula").alias("formula_structure_count"))
+        .filter(pl.col("formula_structure_count") >= min_formula_structures)
+        .sort(["molecular_formula", "inchikey14", "adduct", "ionization_mode"])
         .head(max_structures)
     )
     return groups.collect()
