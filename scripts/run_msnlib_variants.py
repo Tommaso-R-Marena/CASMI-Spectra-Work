@@ -6,7 +6,7 @@ import json
 import math
 from pathlib import Path
 
-from qfd.msnlib import read_msnlib_jsonl
+from qfd.msnlib import load_msnlib_jsonl
 from qfd.msnlib_variants import evaluate_exact_condition_variants, evaluate_merged_variants
 from qfd.stats import paired_bootstrap_delta, paired_win_loss_tie
 
@@ -53,7 +53,7 @@ def main():
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args()
 
-    records = list(read_msnlib_jsonl(args.jsonl))
+    records = load_msnlib_jsonl(args.jsonl)
     trajectory = evaluate_exact_condition_variants(records, hard_static_threshold=args.hard_static_threshold)
     merged = evaluate_merged_variants(records, hard_static_threshold=args.hard_static_threshold)
 
