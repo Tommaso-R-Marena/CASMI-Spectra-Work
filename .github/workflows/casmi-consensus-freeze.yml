@@ -64,6 +64,41 @@ jobs:
             /tmp/casmi2016 /tmp/cfm \
             --out-dir results/casmi_consensus_freeze/features \
             --seed 271828 2>&1 | tee results/casmi_consensus_freeze/feature_run.log
+      - name: Canonicalize gzip metadata and assert byte reproducibility
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          import gzip
+          import hashlib
+          from pathlib import Path
+
+          p = Path('results/casmi_consensus_freeze/features/candidate_features.csv.gz')
+
+          def sha256(path):
+              h = hashlib.sha256()
+              with path.open('rb') as f:
+                  for block in iter(lambda: f.read(1 << 20), b''):
+                      h.update(block)
+              return h.hexdigest()
+
+          def canonicalize(path):
+              with gzip.open(path, 'rb') as f:
+                  payload = f.read()
+              tmp = path.with_suffix(path.suffix + '.tmp')
+              with tmp.open('wb') as raw:
+                  with gzip.GzipFile(filename='', mode='wb', fileobj=raw, compresslevel=9, mtime=0) as gz:
+                      gz.write(payload)
+              tmp.replace(path)
+
+          canonicalize(p)
+          first = sha256(p)
+          canonicalize(p)
+          second = sha256(p)
+          print('canonical candidate_features sha256:', first)
+          if first != second:
+              raise SystemExit('FAIL CLOSED: deterministic gzip canonicalization is not byte reproducible')
+          PY
       - name: Run nested validation and freeze
         shell: bash
         run: |
