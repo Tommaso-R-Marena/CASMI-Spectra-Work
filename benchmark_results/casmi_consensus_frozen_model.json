@@ -14,9 +14,9 @@
   "training_loss": "query-balanced conditional softmax",
   "l2": 1.0,
   "weights": [
-    1.4171661743386224,
-    0.39159938218722784,
-    0.6792755094208592
+    1.4171661743386215,
+    0.39159938218722734,
+    0.6792755094208587
   ],
   "gate": {
     "type": "top-k static/expert set overlap",
@@ -99,8 +99,8 @@
   ],
   "training_query_count": 71,
   "primary_training_coverage_threshold": 0.95,
-  "candidate_features_sha256": "c517d8d3f5da1889b94bdd70d8adb01ec8b68796be4f9e9b8dcdfab3aac59bcb",
-  "per_query_sha256": "8e1dc60261771e9d385ccc1a64107dee8f3b4251583b7c429ea0a6149927cb5f",
+  "candidate_features_sha256": "2e91dc0bcff8c7d02c92767e70423633ccf8a69590411e0a73b5dd8eb6fac125",
+  "per_query_sha256": "499d81a20408fe84439cca77c034a523855596dc1fcbe48f090d2e8d2f3a0840",
   "freeze_gate_passed": true,
   "casmi2022_policy": "Apply these exact features, weights, gate, preprocessing, and candidate policy once to CASMI 2022. No CASMI 2022 outcome may be used to alter this model."
 }
