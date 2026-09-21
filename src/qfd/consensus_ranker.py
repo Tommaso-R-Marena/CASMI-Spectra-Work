@@ -164,6 +164,67 @@ def selective_consensus_scores(
     return (expert.copy() if use_expert else static.copy()), float(overlap), use_expert
 
 
+def protected_tail_consensus_scores(
+    static_scores: Iterable[float],
+    expert_scores: Iterable[float],
+    *,
+    overlap_threshold: float,
+    protected_k: int = 1,
+    overlap_k: int = 10,
+) -> tuple[np.ndarray, float, bool, np.ndarray]:
+    """Safely rerank only the tail below a tie-closed static top-k prefix.
+
+    If static/expert top-``overlap_k`` overlap is below ``overlap_threshold``,
+    the static scores are returned unchanged. Otherwise the static top
+    ``protected_k`` prefix is frozen, including every candidate tied at its
+    cutoff, and only the remaining candidates are ordered by the expert.
+
+    Returned scores are rank-surrogate scores rather than a numerical blend:
+    every protected candidate is above every tail candidate, static ordering
+    and ties are retained inside the protected prefix, and expert ordering and
+    ties are retained inside the tail. This avoids any dependence on relative
+    score scales.
+
+    With ``protected_k=1``, the full static maximum-score tie block is frozen,
+    so tie-aware Top-1 credit is exactly invariant for every possible truth.
+    More generally, using ``protected_k=k`` preserves tie-aware Top-k credit.
+    """
+    static = np.asarray(list(static_scores), dtype=float)
+    expert = np.asarray(list(expert_scores), dtype=float)
+    if static.shape != expert.shape or static.ndim != 1 or static.size == 0:
+        raise ValueError("aligned non-empty score vectors required")
+    if not np.all(np.isfinite(static)) or not np.all(np.isfinite(expert)):
+        raise ValueError("finite score vectors required")
+    pk = int(protected_k)
+    if pk < 1:
+        raise ValueError("protected_k must be positive")
+
+    overlap = topk_overlap_fraction(static, expert, k=overlap_k)
+    use_expert = bool(overlap >= float(overlap_threshold))
+
+    static_order = np.argsort(-static, kind="stable")
+    cutoff = static[static_order[min(pk, int(static.size)) - 1]]
+    protected = static >= cutoff
+    if not use_expert:
+        return static.copy(), float(overlap), False, protected
+
+    # Build lexicographic rank-surrogate scores. Protected score groups occupy
+    # strictly positive levels; the best tail expert group is zero and all
+    # lower tail groups are negative. Exact ties are retained in both regions.
+    out = np.empty_like(static)
+    protected_values = np.unique(static[protected])[::-1]
+    for group_rank, value in enumerate(protected_values):
+        out[protected & (static == value)] = float(len(protected_values) - group_rank + 1)
+
+    tail = ~protected
+    if np.any(tail):
+        expert_values = np.unique(expert[tail])[::-1]
+        for group_rank, value in enumerate(expert_values):
+            out[tail & (expert == value)] = -float(group_rank)
+
+    return out, float(overlap), True, protected
+
+
 def deterministic_fold(key: int, *, salt: str, n_folds: int) -> int:
     import hashlib
 
