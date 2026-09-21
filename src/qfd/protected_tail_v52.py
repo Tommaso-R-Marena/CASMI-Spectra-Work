@@ -4,7 +4,7 @@ from typing import Iterable
 
 import numpy as np
 
-from qfd.consensus_ranker import protected_tail_consensus_scores, topk_overlap_fraction
+from qfd.consensus_ranker import protected_tail_consensus_scores, tie_aware_topk_overlap_fraction
 
 
 def _aligned_finite_scores(
@@ -29,12 +29,12 @@ def static_protected_head_survives_expert(
     """Check whether the full tie-closed static head survives under the expert.
 
     The static top-``protected_k`` prefix is closed under ties exactly as in the
-    v5 protected-tail rule.  For each protected candidate, its expert
+    v5 protected-tail rule. For each protected candidate, its expert
     ``rank_max`` is the last rank occupied by that candidate's complete expert
-    tie block, equivalently ``count(expert >= expert[i])``.  The head survives
+    tie block, equivalently ``count(expert >= expert[i])``. The head survives
     only when every protected candidate has ``rank_max <= head_size + slack``.
 
-    This guard is label-free and invariant to candidate row permutation.  Using
+    This guard is label-free and invariant to candidate row permutation. Using
     tie-block maximum rank rather than an arbitrary stable-sort position makes
     the decision conservative in the presence of exact expert ties.
 
@@ -81,9 +81,9 @@ def protected_tail_v52_scores(
        ``head_size + head_survival_slack`` under the expert, measured with
        expert tie-block maximum ranks.
 
-    If either guard fails, the static scores are returned unchanged.  If both
+    If either guard fails, the static scores are returned unchanged. If both
     pass, the v5 protected-tail construction is used, so the protected static
-    prefix remains exactly above the expert-reranked tail.  Consequently
+    prefix remains exactly above the expert-reranked tail. Consequently
     ``protected_k=1`` retains the v5 theorem of exact tie-aware Top-1
     invariance for every possible truth label.
 
@@ -91,14 +91,16 @@ def protected_tail_v52_scores(
     head_survives, max_protected_expert_rank)``.
     """
     static, expert = _aligned_finite_scores(static_scores, expert_scores)
-    overlap = topk_overlap_fraction(static, expert, k=overlap_k)
+    overlap = tie_aware_topk_overlap_fraction(static, expert, k=overlap_k)
     head_survives, protected, _, max_rank = static_protected_head_survives_expert(
         static,
         expert,
         protected_k=protected_k,
         slack=head_survival_slack,
     )
-    use_expert = bool(overlap >= float(overlap_threshold) and head_survives)
+    # The tiny tolerance only absorbs floating arithmetic at exact fractional
+    # overlap boundaries (for example, a mathematically exact 0.8).
+    use_expert = bool(overlap + 1e-12 >= float(overlap_threshold) and head_survives)
     if not use_expert:
         return static.copy(), float(overlap), False, protected, head_survives, max_rank
 
