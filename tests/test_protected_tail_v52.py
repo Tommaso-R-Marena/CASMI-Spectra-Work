@@ -29,14 +29,14 @@ def test_head_survival_accepts_full_tie_closed_head_with_slack_one():
 def test_head_survival_rejects_when_any_protected_tie_block_falls_too_low():
     static = np.array([9.0, 9.0, 7.0, 6.0, 5.0, 4.0])
     # Candidate 1 is in the static max tie block but its expert score occupies
-    # rank 4, below head_size + slack = 3.
+    # rank 5, below head_size + slack = 3.
     expert = np.array([8.0, 6.0, 10.0, 9.0, 7.0, 5.0])
     survives, protected, head_size, max_rank = static_protected_head_survives_expert(
         static, expert, protected_k=1, slack=1
     )
     assert not survives
     assert head_size == 2
-    assert max_rank == 4
+    assert max_rank == 5
     assert np.array_equal(protected, np.array([True, True, False, False, False, False]))
 
 
@@ -142,3 +142,34 @@ def test_v52_decision_and_scores_are_candidate_permutation_equivariant():
         assert max_rank == base_max_rank
         assert np.array_equal(protected[inv], base_protected)
         assert np.array_equal(scores[inv], base_scores)
+
+
+def test_v52_overlap_gate_is_permutation_equivariant_at_cutoff_ties():
+    # Both score vectors have cutoff ties crossing top-3. The gate must be
+    # independent of arbitrary candidate row order.
+    static = np.array([10.0, 9.0, 8.0, 8.0, 8.0, 1.0])
+    expert = np.array([10.0, 8.0, 9.0, 8.0, 8.0, 1.0])
+    baseline = protected_tail_v52_scores(
+        static,
+        expert,
+        overlap_threshold=0.7,
+        protected_k=1,
+        overlap_k=3,
+        head_survival_slack=10,
+    )
+    rng = np.random.default_rng(53)
+    for _ in range(100):
+        perm = rng.permutation(static.size)
+        inv = np.argsort(perm)
+        result = protected_tail_v52_scores(
+            static[perm],
+            expert[perm],
+            overlap_threshold=0.7,
+            protected_k=1,
+            overlap_k=3,
+            head_survival_slack=10,
+        )
+        assert result[1] == baseline[1]
+        assert result[2] == baseline[2]
+        assert np.array_equal(result[3][inv], baseline[3])
+        assert np.array_equal(result[0][inv], baseline[0])
