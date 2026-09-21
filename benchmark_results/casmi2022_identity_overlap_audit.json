@@ -1,0 +1,24 @@
+{
+  "protocol": {
+    "timing": "computed before CASMI 2022 ranking outcomes",
+    "training_set": "exact 71 CASMI-2016 truth mol_ids embedded in the frozen model",
+    "lockbox_truth_scope": "CASMI 2022 [M+H]+ truth molecules",
+    "exact_identity_definition": "equality of standard RDKit InChIKey derived from processed canonical SMILES",
+    "connectivity_identity_definition": "equality of the 14-character first block of the standard InChIKey",
+    "effect_on_primary_analysis": "none; overlap labels are secondary sensitivity strata only",
+    "structure_source": "MassFormer all_smiles.txt mol_id/SMILES export written directly from processed mol_df",
+    "memory_policy": "stream text molecular index; retain only predeclared truth/training IDs"
+  },
+  "counts": {
+    "training_truth_molecules": 71,
+    "training_unique_exact_inchikeys": 71,
+    "training_unique_connectivity_blocks": 71,
+    "casmi2022_positive_mh_truth_molecules": 169,
+    "exact_training_overlap_truths": 0,
+    "exact_unseen_truths": 169,
+    "connectivity_training_overlap_truths": 0,
+    "connectivity_unseen_truths": 169
+  },
+  "exact_overlap_query_mol_ids": [],
+  "connectivity_overlap_query_mol_ids": []
+}
