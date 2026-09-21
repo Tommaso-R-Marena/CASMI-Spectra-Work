@@ -39,6 +39,26 @@ def _tie_metrics(scores: np.ndarray, truth: np.ndarray, cutoff: int) -> dict[str
     }
 
 
+def _tie_topk_credit_vector(scores: np.ndarray, k: int) -> np.ndarray:
+    """Tie-aware Top-k credit for every possible truth in O(n log n)."""
+    s = np.asarray(scores, dtype=float)
+    order = np.argsort(-s, kind="stable")
+    sorted_s = s[order]
+    out = np.empty(s.size, dtype=float)
+    start = 0
+    while start < s.size:
+        end = start + 1
+        while end < s.size and sorted_s[end] == sorted_s[start]:
+            end += 1
+        tied = end - start
+        # One-indexed occupied ranks are start+1,...,end. The fraction at or
+        # above k is exactly the tie-aware Top-k credit for this score group.
+        credited = max(0, min(end, int(k)) - start)
+        out[order[start:end]] = float(credited / tied)
+        start = end
+    return out
+
+
 def _mean_metrics(rows: list[dict[str, float]]) -> dict[str, float]:
     return {
         "mrr": float(np.mean([r["rr"] for r in rows])),
@@ -120,23 +140,11 @@ def main() -> None:
         static_rows.append(sm)
         protected_rows.append(pm)
 
-        # The construction must preserve tie-aware Top-k credit at protected_k
-        # for every candidate, not only for the observed truth. Audit this
-        # directly on each real candidate pool.
-        for idx in range(static.size):
-            probe = np.zeros(static.size, dtype=bool)
-            probe[idx] = True
-            before = _tie_metrics(static, probe, max(args.protected_k, 1))
-            after = _tie_metrics(chosen, probe, max(args.protected_k, 1))
-            if before["rr"] != after["rr"] or before["top1"] != after["top1"]:
-                # rr at cutoff k plus Top-1 is stronger than necessary for k>1;
-                # only compare generic Top-k separately below.
-                ranks_before = np.arange(before["rank_min"], before["rank_max"] + 1)
-                ranks_after = np.arange(after["rank_min"], after["rank_max"] + 1)
-                credit_before = float(np.mean(ranks_before <= args.protected_k))
-                credit_after = float(np.mean(ranks_after <= args.protected_k))
-                if credit_before != credit_after:
-                    invariant_violations += 1
+        # Audit the theorem on every real candidate in this pool without using
+        # labels: tie-aware Top-protected_k credit must be candidatewise equal.
+        before_credit = _tie_topk_credit_vector(static, args.protected_k)
+        after_credit = _tie_topk_credit_vector(chosen, args.protected_k)
+        invariant_violations += int(np.sum(before_credit != after_credit))
 
         query_rows.append({
             "spec_id": int(spec_id),
