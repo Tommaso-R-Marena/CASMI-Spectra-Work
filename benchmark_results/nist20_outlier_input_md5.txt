@@ -1,0 +1,2 @@
+dab95dd818a5bab14a22bee5551c861e  proc_nist20_outlier.tgz
+9091cbc446124dc947cb2a7b01fe9c98  cfm.tgz
