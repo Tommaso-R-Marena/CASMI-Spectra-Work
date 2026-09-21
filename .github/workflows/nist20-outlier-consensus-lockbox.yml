@@ -1,0 +1,151 @@
+name: nist20-outlier-consensus-lockbox
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [nist20-outlier-v3]
+    paths:
+      - '.github/workflows/nist20-outlier-consensus-lockbox.yml'
+      - 'scripts/run_nist20_outlier_consensus_lockbox.py'
+      - '.lockbox/NIST20_RUN_ONCE'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nist20-outlier-consensus-lockbox
+  cancel-in-progress: false
+
+jobs:
+  lockbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install project and benchmark dependencies
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install pandas
+
+      - name: Run full test suite
+        run: PYTHONPATH=src pytest -q
+
+      - name: Verify frozen model and one-shot state
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test ! -f benchmark_results/nist20_outlier_consensus_lockbox_summary.json
+          test -f .lockbox/NIST20_RUN_ONCE
+          sha256sum -c benchmark_results/casmi_consensus_frozen_model.sha256
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d = json.loads(Path('benchmark_results/casmi_consensus_frozen_model.json').read_text())
+          assert d['freeze_gate_passed'] is True
+          assert d['feature_names'] == ['z_static_best', 'z_ordered_path', 'z_neg_energy_spread']
+          assert d['l2'] == 1.0
+          assert d['gate']['top_k'] == 10
+          assert d['gate']['overlap_threshold'] == 0.2
+          assert d['gate']['fallback'] == 'static_best'
+          print('Frozen-model preflight passed; NIST20 cannot change model parameters.')
+          PY
+
+      - name: Download and verify NIST20 Outlier
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/nist20 /tmp/cfm results/nist20_outlier_consensus_lockbox
+          curl -L --fail --retry 3 --retry-delay 2 \
+            'https://zenodo.org/records/8399738/files/proc_nist20_outlier.tgz?download=1' \
+            -o /tmp/proc_nist20_outlier.tgz
+          echo 'dab95dd818a5bab14a22bee5551c861e  /tmp/proc_nist20_outlier.tgz' | md5sum -c -
+          tar -xzf /tmp/proc_nist20_outlier.tgz -C /tmp/nist20
+
+      - name: Download and verify pCASMI CFM predictions
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 --retry-delay 3 \
+            'https://zenodo.org/records/8399738/files/cfm.tgz?download=1' \
+            -o /tmp/cfm.tgz
+          echo '9091cbc446124dc947cb2a7b01fe9c98  /tmp/cfm.tgz' | md5sum -c -
+          MEMBER="$(tar -tzf /tmp/cfm.tgz | grep -E '(^|/)pcasmi_spec_df\.pkl$' | head -n1)"
+          test -n "$MEMBER"
+          tar -xzf /tmp/cfm.tgz -C /tmp/cfm "$MEMBER"
+
+      - name: Run one-shot NIST20 third-domain lockbox
+        shell: bash
+        run: |
+          set -o pipefail
+          PYTHONPATH=src:scripts python scripts/run_nist20_outlier_consensus_lockbox.py \
+            /tmp/nist20 /tmp/cfm \
+            benchmark_results/casmi_consensus_frozen_model.json \
+            --out-dir results/nist20_outlier_consensus_lockbox \
+            2>&1 | tee results/nist20_outlier_consensus_lockbox/run.log
+
+      - name: Show compact lockbox result
+        if: always()
+        shell: bash
+        run: |
+          if [ -f results/nist20_outlier_consensus_lockbox/summary.json ]; then
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          d = json.loads(Path('results/nist20_outlier_consensus_lockbox/summary.json').read_text())
+          p = d['primary_ge_0_99']
+          print(json.dumps({
+              'coverage': d['coverage'],
+              'static': p['metrics']['static'],
+              'expert': p['metrics']['expert'],
+              'gated': p['metrics']['gated'],
+              'gated_risk': p['risk']['gated'],
+              'gated_inference': p['inference']['gated_vs_static'],
+              'permuted_control_risk': p['risk']['permuted_control'],
+              'expert_usage_fraction': p['expert_usage_fraction'],
+              'replication_gate': p['replication_gate'],
+          }, indent=2))
+          PY
+          fi
+
+      - name: Persist immutable NIST20 lockbox result
+        if: success()
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test ! -f benchmark_results/nist20_outlier_consensus_lockbox_summary.json
+          cp results/nist20_outlier_consensus_lockbox/summary.json \
+            benchmark_results/nist20_outlier_consensus_lockbox_summary.json
+          cp results/nist20_outlier_consensus_lockbox/primary_selection.json \
+            benchmark_results/nist20_outlier_primary_selection.json
+          sha256sum benchmark_results/casmi_consensus_frozen_model.json > \
+            benchmark_results/nist20_outlier_frozen_model_used.sha256
+          printf '%s\n' \
+            'dab95dd818a5bab14a22bee5551c861e  proc_nist20_outlier.tgz' \
+            '9091cbc446124dc947cb2a7b01fe9c98  cfm.tgz' > \
+            benchmark_results/nist20_outlier_lockbox_input_md5.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            benchmark_results/nist20_outlier_consensus_lockbox_summary.json \
+            benchmark_results/nist20_outlier_primary_selection.json \
+            benchmark_results/nist20_outlier_frozen_model_used.sha256 \
+            benchmark_results/nist20_outlier_lockbox_input_md5.txt
+          git commit -m 'Record one-shot NIST20 Outlier consensus lockbox result'
+          git pull --rebase origin nist20-outlier-v3
+          git push origin HEAD:nist20-outlier-v3
+
+      - name: Upload complete lockbox artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nist20-outlier-consensus-lockbox
+          path: results/nist20_outlier_consensus_lockbox/
+          if-no-files-found: ignore
+          retention-days: 90
