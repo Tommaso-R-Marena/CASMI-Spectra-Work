@@ -1,0 +1,750 @@
+{
+  "protocol": {
+    "dataset_role": "CASMI 2016 development only; CASMI 2022 remains external lockbox",
+    "primary_coverage_threshold": 0.95,
+    "n_queries": 71,
+    "outer_folds": 5,
+    "inner_folds": 4,
+    "outer_salt": "consensus-outer-v3",
+    "inner_salt_prefix": "consensus-inner",
+    "l2": 1.0,
+    "top_k": 10,
+    "threshold_grid": [
+      0.0,
+      0.1,
+      0.2,
+      0.3,
+      0.4,
+      0.5,
+      0.6,
+      0.7,
+      0.8,
+      0.9,
+      1.0,
+      1.1
+    ],
+    "threshold_selection": "inner out-of-fold: require Top-1 noninferiority and zero static-top3->below25 catastrophes; maximize MRR@25, then Top-5, then smaller threshold",
+    "frozen_threshold_rule": "median of five independently selected outer-fold thresholds",
+    "no_casmi2022_outcomes_seen": true
+  },
+  "nested_oof": {
+    "static": {
+      "n": 71,
+      "mrr25": 0.197609369831398,
+      "top1": 0.08591549295774648,
+      "top5": 0.31690140845070425,
+      "median_expected_rank": 18.5
+    },
+    "expert": {
+      "n": 71,
+      "mrr25": 0.2387312473036271,
+      "top1": 0.12112676056338027,
+      "top5": 0.3873239436619718,
+      "median_expected_rank": 10.5
+    },
+    "gated": {
+      "n": 71,
+      "mrr25": 0.25316998579365674,
+      "top1": 0.1352112676056338,
+      "top5": 0.4014084507042254,
+      "median_expected_rank": 15.0
+    },
+    "risk": {
+      "rr_wins": 19,
+      "rr_losses": 7,
+      "rr_ties": 45,
+      "delta_mrr": 0.05556061596225877,
+      "delta_top1": 0.04929577464788732,
+      "delta_top5": 0.08450704225352113,
+      "catastrophic_static_top3_to_below25": 0
+    },
+    "bootstrap": {
+      "delta": 0.05556061596225877,
+      "ci_low": 0.019596192932357214,
+      "ci_high": 0.09595962189559087,
+      "n": 71,
+      "n_blocks": 71,
+      "seed": 20260920,
+      "n_boot": 100000,
+      "resampling_unit": "block"
+    },
+    "signflip": {
+      "delta": 0.05556061596225877,
+      "p_value_two_sided": 0.00397999204001592,
+      "n": 71,
+      "n_blocks": 71,
+      "mode": "monte_carlo",
+      "n_permutations": 500000,
+      "seed": 20260921,
+      "extreme": 1989
+    },
+    "outer_selection": [
+      {
+        "outer_fold": 0,
+        "n_train": 61,
+        "n_test": 10,
+        "selected_threshold": 0.2,
+        "inner_selected": {
+          "threshold": 0.2,
+          "feasible": true,
+          "mrr25": 0.25512073013935066,
+          "top1": 0.12459016393442622,
+          "top5": 0.4426229508196721,
+          "catastrophes": 0,
+          "expert_fraction": 0.8524590163934426
+        },
+        "inner_threshold_table": [
+          {
+            "threshold": 0.0,
+            "feasible": false,
+            "mrr25": 0.2343723480866208,
+            "top1": 0.10819672131147541,
+            "top5": 0.4098360655737705,
+            "catastrophes": 1,
+            "expert_fraction": 1.0
+          },
+          {
+            "threshold": 0.1,
+            "feasible": false,
+            "mrr25": 0.23217679773533273,
+            "top1": 0.10819672131147541,
+            "top5": 0.4098360655737705,
+            "catastrophes": 1,
+            "expert_fraction": 0.9672131147540983
+          },
+          {
+            "threshold": 0.2,
+            "feasible": true,
+            "mrr25": 0.25512073013935066,
+            "top1": 0.12459016393442622,
+            "top5": 0.4426229508196721,
+            "catastrophes": 0,
+            "expert_fraction": 0.8524590163934426
+          },
+          {
+            "threshold": 0.3,
+            "feasible": true,
+            "mrr25": 0.25446951112278093,
+            "top1": 0.12459016393442622,
+            "top5": 0.4426229508196721,
+            "catastrophes": 0,
+            "expert_fraction": 0.7704918032786885
+          },
+          {
+            "threshold": 0.4,
+            "feasible": true,
+            "mrr25": 0.24217442915556783,
+            "top1": 0.11639344262295082,
+            "top5": 0.4262295081967213,
+            "catastrophes": 0,
+            "expert_fraction": 0.7377049180327869
+          },
+          {
+            "threshold": 0.5,
+            "feasible": true,
+            "mrr25": 0.24586338424580065,
+            "top1": 0.11639344262295082,
+            "top5": 0.4344262295081967,
+            "catastrophes": 0,
+            "expert_fraction": 0.6557377049180327
+          },
+          {
+            "threshold": 0.6,
+            "feasible": true,
+            "mrr25": 0.24324660911544613,
+            "top1": 0.11639344262295082,
+            "top5": 0.4262295081967213,
+            "catastrophes": 0,
+            "expert_fraction": 0.5737704918032787
+          },
+          {
+            "threshold": 0.7,
+            "feasible": true,
+            "mrr25": 0.2446967982705533,
+            "top1": 0.11639344262295082,
+            "top5": 0.4180327868852459,
+            "catastrophes": 0,
+            "expert_fraction": 0.45901639344262296
+          },
+          {
+            "threshold": 0.8,
+            "feasible": true,
+            "mrr25": 0.2450610969955078,
+            "top1": 0.12459016393442622,
+            "top5": 0.4016393442622951,
+            "catastrophes": 0,
+            "expert_fraction": 0.32786885245901637
+          },
+          {
+            "threshold": 0.9,
+            "feasible": true,
+            "mrr25": 0.2450610969955078,
+            "top1": 0.12459016393442622,
+            "top5": 0.4016393442622951,
+            "catastrophes": 0,
+            "expert_fraction": 0.2786885245901639
+          },
+          {
+            "threshold": 1.0,
+            "feasible": true,
+            "mrr25": 0.2365932747494097,
+            "top1": 0.1122950819672131,
+            "top5": 0.39344262295081966,
+            "catastrophes": 0,
+            "expert_fraction": 0.14754098360655737
+          },
+          {
+            "threshold": 1.1,
+            "feasible": true,
+            "mrr25": 0.2176351040494357,
+            "top1": 0.0959016393442623,
+            "top5": 0.3524590163934426,
+            "catastrophes": 0,
+            "expert_fraction": 0.0
+          }
+        ],
+        "weights": [
+          1.6141157830545623,
+          0.27144760515784383,
+          0.6576951363237673
+        ]
+      },
+      {
+        "outer_fold": 1,
+        "n_train": 59,
+        "n_test": 12,
+        "selected_threshold": 0.3,
+        "inner_selected": {
+          "threshold": 0.3,
+          "feasible": true,
+          "mrr25": 0.2569640611977389,
+          "top1": 0.13728813559322034,
+          "top5": 0.4152542372881356,
+          "catastrophes": 0,
+          "expert_fraction": 0.711864406779661
+        },
+        "inner_threshold_table": [
+          {
+            "threshold": 0.0,
+            "feasible": true,
+            "mrr25": 0.25356255377143083,
+            "top1": 0.12966101694915252,
+            "top5": 0.4194915254237288,
+            "catastrophes": 0,
+            "expert_fraction": 1.0
+          },
+          {
+            "threshold": 0.1,
+            "feasible": true,
+            "mrr25": 0.24660955499750356,
+            "top1": 0.1288135593220339,
+            "top5": 0.4067796610169492,
+            "catastrophes": 0,
+            "expert_fraction": 0.9322033898305084
+          },
+          {
+            "threshold": 0.2,
+            "feasible": true,
+            "mrr25": 0.25418840822484606,
+            "top1": 0.13728813559322034,
+            "top5": 0.4067796610169492,
+            "catastrophes": 0,
+            "expert_fraction": 0.8135593220338984
+          },
+          {
+            "threshold": 0.3,
+            "feasible": true,
+            "mrr25": 0.2569640611977389,
+            "top1": 0.13728813559322034,
+            "top5": 0.4152542372881356,
+            "catastrophes": 0,
+            "expert_fraction": 0.711864406779661
+          },
+          {
+            "threshold": 0.4,
+            "feasible": true,
+            "mrr25": 0.23860247927683495,
+            "top1": 0.12033898305084745,
+            "top5": 0.3983050847457627,
+            "catastrophes": 0,
+            "expert_fraction": 0.6440677966101694
+          },
+          {
+            "threshold": 0.5,
+            "feasible": true,
+            "mrr25": 0.235519796109406,
+            "top1": 0.12033898305084745,
+            "top5": 0.3983050847457627,
+            "catastrophes": 0,
+            "expert_fraction": 0.5423728813559322
+          },
+          {
+            "threshold": 0.6,
+            "feasible": true,
+            "mrr25": 0.235519796109406,
+            "top1": 0.12033898305084745,
+            "top5": 0.3983050847457627,
+            "catastrophes": 0,
+            "expert_fraction": 0.5254237288135594
+          },
+          {
+            "threshold": 0.7,
+            "feasible": true,
+            "mrr25": 0.23694729986741825,
+            "top1": 0.12033898305084745,
+            "top5": 0.3898305084745763,
+            "catastrophes": 0,
+            "expert_fraction": 0.3898305084745763
+          },
+          {
+            "threshold": 0.8,
+            "feasible": true,
+            "mrr25": 0.2341030548247684,
+            "top1": 0.12033898305084745,
+            "top5": 0.3728813559322034,
+            "catastrophes": 0,
+            "expert_fraction": 0.288135593220339
+          },
+          {
+            "threshold": 0.9,
+            "feasible": true,
+            "mrr25": 0.22339213203757446,
+            "top1": 0.11186440677966102,
+            "top5": 0.3559322033898305,
+            "catastrophes": 0,
+            "expert_fraction": 0.2033898305084746
+          },
+          {
+            "threshold": 1.0,
+            "feasible": true,
+            "mrr25": 0.2105491134742169,
+            "top1": 0.09491525423728812,
+            "top5": 0.3389830508474576,
+            "catastrophes": 0,
+            "expert_fraction": 0.1016949152542373
+          },
+          {
+            "threshold": 1.1,
+            "feasible": true,
+            "mrr25": 0.19249187645511545,
+            "top1": 0.07796610169491525,
+            "top5": 0.3135593220338983,
+            "catastrophes": 0,
+            "expert_fraction": 0.0
+          }
+        ],
+        "weights": [
+          1.3881598967822668,
+          0.4159099811753095,
+          0.7084648337166609
+        ]
+      },
+      {
+        "outer_fold": 2,
+        "n_train": 60,
+        "n_test": 11,
+        "selected_threshold": 0.3,
+        "inner_selected": {
+          "threshold": 0.3,
+          "feasible": true,
+          "mrr25": 0.19667722787014694,
+          "top1": 0.08499999999999999,
+          "top5": 0.3472222222222222,
+          "catastrophes": 0,
+          "expert_fraction": 0.7833333333333333
+        },
+        "inner_threshold_table": [
+          {
+            "threshold": 0.0,
+            "feasible": false,
+            "mrr25": 0.19112269226603676,
+            "top1": 0.07666666666666666,
+            "top5": 0.33888888888888885,
+            "catastrophes": 1,
+            "expert_fraction": 1.0
+          },
+          {
+            "threshold": 0.1,
+            "feasible": false,
+            "mrr25": 0.18654453491614026,
+            "top1": 0.07666666666666666,
+            "top5": 0.33055555555555555,
+            "catastrophes": 1,
+            "expert_fraction": 0.9333333333333333
+          },
+          {
+            "threshold": 0.2,
+            "feasible": false,
+            "mrr25": 0.1855804072563604,
+            "top1": 0.07666666666666666,
+            "top5": 0.33055555555555555,
+            "catastrophes": 1,
+            "expert_fraction": 0.8833333333333333
+          },
+          {
+            "threshold": 0.3,
+            "feasible": true,
+            "mrr25": 0.19667722787014694,
+            "top1": 0.08499999999999999,
+            "top5": 0.3472222222222222,
+            "catastrophes": 0,
+            "expert_fraction": 0.7833333333333333
+          },
+          {
+            "threshold": 0.4,
+            "feasible": true,
+            "mrr25": 0.19667722787014694,
+            "top1": 0.08499999999999999,
+            "top5": 0.3472222222222222,
+            "catastrophes": 0,
+            "expert_fraction": 0.7333333333333333
+          },
+          {
+            "threshold": 0.5,
+            "feasible": true,
+            "mrr25": 0.185558067121052,
+            "top1": 0.07666666666666666,
+            "top5": 0.3333333333333333,
+            "catastrophes": 0,
+            "expert_fraction": 0.6
+          },
+          {
+            "threshold": 0.6,
+            "feasible": true,
+            "mrr25": 0.18552650146448632,
+            "top1": 0.07666666666666666,
+            "top5": 0.3333333333333333,
+            "catastrophes": 0,
+            "expert_fraction": 0.55
+          },
+          {
+            "threshold": 0.7,
+            "feasible": true,
+            "mrr25": 0.1830413246043095,
+            "top1": 0.07666666666666666,
+            "top5": 0.31666666666666665,
+            "catastrophes": 0,
+            "expert_fraction": 0.45
+          },
+          {
+            "threshold": 0.8,
+            "feasible": true,
+            "mrr25": 0.1858000392012594,
+            "top1": 0.08499999999999999,
+            "top5": 0.3,
+            "catastrophes": 0,
+            "expert_fraction": 0.31666666666666665
+          },
+          {
+            "threshold": 0.9,
+            "feasible": true,
+            "mrr25": 0.1806531595227301,
+            "top1": 0.07666666666666666,
+            "top5": 0.30833333333333335,
+            "catastrophes": 0,
+            "expert_fraction": 0.2
+          },
+          {
+            "threshold": 1.0,
+            "feasible": true,
+            "mrr25": 0.18061347698304753,
+            "top1": 0.0725,
+            "top5": 0.31666666666666665,
+            "catastrophes": 0,
+            "expert_fraction": 0.11666666666666667
+          },
+          {
+            "threshold": 1.1,
+            "feasible": true,
+            "mrr25": 0.17357974682431737,
+            "top1": 0.06833333333333333,
+            "top5": 0.2916666666666667,
+            "catastrophes": 0,
+            "expert_fraction": 0.0
+          }
+        ],
+        "weights": [
+          1.404333276130636,
+          0.2997977464997118,
+          0.6137775167653308
+        ]
+      },
+      {
+        "outer_fold": 3,
+        "n_train": 50,
+        "n_test": 21,
+        "selected_threshold": 0.2,
+        "inner_selected": {
+          "threshold": 0.2,
+          "feasible": true,
+          "mrr25": 0.27091499975803546,
+          "top1": 0.142,
+          "top5": 0.423,
+          "catastrophes": 0,
+          "expert_fraction": 0.84
+        },
+        "inner_threshold_table": [
+          {
+            "threshold": 0.0,
+            "feasible": false,
+            "mrr25": 0.2463389407928461,
+            "top1": 0.122,
+            "top5": 0.40299999999999997,
+            "catastrophes": 2,
+            "expert_fraction": 1.0
+          },
+          {
+            "threshold": 0.1,
+            "feasible": false,
+            "mrr25": 0.2426903900682084,
+            "top1": 0.122,
+            "top5": 0.38299999999999995,
+            "catastrophes": 2,
+            "expert_fraction": 0.94
+          },
+          {
+            "threshold": 0.2,
+            "feasible": true,
+            "mrr25": 0.27091499975803546,
+            "top1": 0.142,
+            "top5": 0.423,
+            "catastrophes": 0,
+            "expert_fraction": 0.84
+          },
+          {
+            "threshold": 0.3,
+            "feasible": true,
+            "mrr25": 0.26172704831117843,
+            "top1": 0.142,
+            "top5": 0.4,
+            "catastrophes": 0,
+            "expert_fraction": 0.76
+          },
+          {
+            "threshold": 0.4,
+            "feasible": true,
+            "mrr25": 0.2588580006921308,
+            "top1": 0.132,
+            "top5": 0.41,
+            "catastrophes": 0,
+            "expert_fraction": 0.64
+          },
+          {
+            "threshold": 0.5,
+            "feasible": true,
+            "mrr25": 0.24300598234011242,
+            "top1": 0.122,
+            "top5": 0.39,
+            "catastrophes": 0,
+            "expert_fraction": 0.6
+          },
+          {
+            "threshold": 0.6,
+            "feasible": true,
+            "mrr25": 0.23704790780595095,
+            "top1": 0.122,
+            "top5": 0.37,
+            "catastrophes": 0,
+            "expert_fraction": 0.54
+          },
+          {
+            "threshold": 0.7,
+            "feasible": true,
+            "mrr25": 0.23791831466087796,
+            "top1": 0.122,
+            "top5": 0.37,
+            "catastrophes": 0,
+            "expert_fraction": 0.42
+          },
+          {
+            "threshold": 0.8,
+            "feasible": true,
+            "mrr25": 0.23456210551055115,
+            "top1": 0.122,
+            "top5": 0.35,
+            "catastrophes": 0,
+            "expert_fraction": 0.32
+          },
+          {
+            "threshold": 0.9,
+            "feasible": true,
+            "mrr25": 0.22192321662166226,
+            "top1": 0.11199999999999999,
+            "top5": 0.33,
+            "catastrophes": 0,
+            "expert_fraction": 0.2
+          },
+          {
+            "threshold": 1.0,
+            "feasible": true,
+            "mrr25": 0.21574696100742707,
+            "top1": 0.102,
+            "top5": 0.34,
+            "catastrophes": 0,
+            "expert_fraction": 0.14
+          },
+          {
+            "threshold": 1.1,
+            "feasible": true,
+            "mrr25": 0.20772513561060166,
+            "top1": 0.09699999999999999,
+            "top5": 0.32,
+            "catastrophes": 0,
+            "expert_fraction": 0.0
+          }
+        ],
+        "weights": [
+          1.2336414496370305,
+          0.49168521164733964,
+          0.6342656571947709
+        ]
+      },
+      {
+        "outer_fold": 4,
+        "n_train": 54,
+        "n_test": 17,
+        "selected_threshold": 0.2,
+        "inner_selected": {
+          "threshold": 0.2,
+          "feasible": true,
+          "mrr25": 0.26071347043363646,
+          "top1": 0.1388888888888889,
+          "top5": 0.4074074074074074,
+          "catastrophes": 0,
+          "expert_fraction": 0.8148148148148148
+        },
+        "inner_threshold_table": [
+          {
+            "threshold": 0.0,
+            "feasible": false,
+            "mrr25": 0.23980480480154084,
+            "top1": 0.12129629629629629,
+            "top5": 0.38425925925925924,
+            "catastrophes": 1,
+            "expert_fraction": 1.0
+          },
+          {
+            "threshold": 0.1,
+            "feasible": true,
+            "mrr25": 0.24609689873373142,
+            "top1": 0.12962962962962962,
+            "top5": 0.3888888888888889,
+            "catastrophes": 0,
+            "expert_fraction": 0.9074074074074074
+          },
+          {
+            "threshold": 0.2,
+            "feasible": true,
+            "mrr25": 0.26071347043363646,
+            "top1": 0.1388888888888889,
+            "top5": 0.4074074074074074,
+            "catastrophes": 0,
+            "expert_fraction": 0.8148148148148148
+          },
+          {
+            "threshold": 0.3,
+            "feasible": true,
+            "mrr25": 0.25375314765883134,
+            "top1": 0.1388888888888889,
+            "top5": 0.3888888888888889,
+            "catastrophes": 0,
+            "expert_fraction": 0.7037037037037037
+          },
+          {
+            "threshold": 0.4,
+            "feasible": true,
+            "mrr25": 0.23369141926376963,
+            "top1": 0.12037037037037036,
+            "top5": 0.37037037037037035,
+            "catastrophes": 0,
+            "expert_fraction": 0.5925925925925926
+          },
+          {
+            "threshold": 0.5,
+            "feasible": true,
+            "mrr25": 0.23792385074056505,
+            "top1": 0.12037037037037036,
+            "top5": 0.3888888888888889,
+            "catastrophes": 0,
+            "expert_fraction": 0.5
+          },
+          {
+            "threshold": 0.6,
+            "feasible": true,
+            "mrr25": 0.23892852974017006,
+            "top1": 0.12037037037037036,
+            "top5": 0.3888888888888889,
+            "catastrophes": 0,
+            "expert_fraction": 0.46296296296296297
+          },
+          {
+            "threshold": 0.7,
+            "feasible": true,
+            "mrr25": 0.22418750037495772,
+            "top1": 0.1111111111111111,
+            "top5": 0.3611111111111111,
+            "catastrophes": 0,
+            "expert_fraction": 0.3888888888888889
+          },
+          {
+            "threshold": 0.8,
+            "feasible": true,
+            "mrr25": 0.2310305600259884,
+            "top1": 0.12037037037037036,
+            "top5": 0.37037037037037035,
+            "catastrophes": 0,
+            "expert_fraction": 0.2777777777777778
+          },
+          {
+            "threshold": 0.9,
+            "feasible": true,
+            "mrr25": 0.21315504562269622,
+            "top1": 0.10185185185185185,
+            "top5": 0.35185185185185186,
+            "catastrophes": 0,
+            "expert_fraction": 0.18518518518518517
+          },
+          {
+            "threshold": 1.0,
+            "feasible": true,
+            "mrr25": 0.21315504562269622,
+            "top1": 0.10185185185185185,
+            "top5": 0.35185185185185186,
+            "catastrophes": 0,
+            "expert_fraction": 0.12962962962962962
+          },
+          {
+            "threshold": 1.1,
+            "feasible": true,
+            "mrr25": 0.19791217378260217,
+            "top1": 0.09259259259259259,
+            "top5": 0.3055555555555556,
+            "catastrophes": 0,
+            "expert_fraction": 0.0
+          }
+        ],
+        "weights": [
+          1.4036866766977376,
+          0.4975365551035076,
+          0.7718817546718817
+        ]
+      }
+    ]
+  },
+  "frozen_threshold": 0.2,
+  "final_fit_weights": [
+    1.4171661743386224,
+    0.39159938218722784,
+    0.6792755094208592
+  ],
+  "freeze_gate": {
+    "nested_delta_mrr_positive": true,
+    "bootstrap_95pct_lower_bound_positive": true,
+    "two_sided_signflip_p_lt_0_01": true,
+    "top1_noninferior": true,
+    "zero_static_top3_to_below25_catastrophes": true,
+    "threshold_stability_range_le_0_2": true,
+    "pass": true
+  },
+  "interpretation_guardrail": "Nested CASMI 2016 results are development evidence, not independent external generalization. A general empirical claim requires the frozen model to replicate on CASMI 2022 without modification."
+}
