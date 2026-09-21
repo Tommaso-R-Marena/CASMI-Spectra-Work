@@ -29,42 +29,39 @@ def _structure_keys(smiles: str) -> tuple[str, str, str]:
 
 
 def _load_selected_smiles(path: Path, wanted_ids: set[int], label: str) -> dict[int, str]:
-    """Load one large molecular table at a time and immediately discard it.
+    """Stream the published mol_id/SMILES export and retain only wanted IDs.
 
-    CASMI 2022 contains >1M candidate molecules.  The overlap audit needs only
-    the frozen 2016 training truths and the 2022 lockbox truths, so retaining
-    both complete mol_df tables at once is unnecessary and can exhaust a hosted
-    runner.  This helper preserves the exact structural-overlap definition while
-    minimizing peak memory.
+    MassFormer's CASMI preprocessing writes ``all_smiles.txt`` directly from
+    ``mol_df[[\"mol_id\", \"smiles\"]]``.  Streaming that text export is exactly
+    equivalent for this identity audit, while avoiding deserializing the
+    million-row RDKit-rich ``mol_df.pkl`` on a hosted CI runner.
     """
-    print(f"[{label}] loading molecular table: {path}", flush=True)
-    frame = pd.read_pickle(path)
-    needed = {"mol_id", "smiles"}
-    if not needed.issubset(frame.columns):
-        raise RuntimeError(f"{label} mol_df missing columns: {sorted(needed - set(frame.columns))}")
+    print(f"[{label}] streaming molecular index: {path}", flush=True)
+    out: dict[int, str] = {}
+    with path.open("rt", encoding="utf-8") as f:
+        for line_no, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(maxsplit=1)
+            if len(parts) != 2:
+                raise RuntimeError(f"{label} malformed all_smiles row {line_no}: {line[:120]!r}")
+            try:
+                mid = int(parts[0])
+            except ValueError as e:
+                raise RuntimeError(f"{label} non-integer mol_id on row {line_no}: {parts[0]!r}") from e
+            if mid not in wanted_ids:
+                continue
+            if mid in out:
+                raise RuntimeError(f"{label} duplicate requested mol_id {mid} in all_smiles.txt")
+            out[mid] = parts[1]
+            if len(out) == len(wanted_ids):
+                break
 
-    ids = frame["mol_id"].astype(int)
-    selected = frame.loc[ids.isin(wanted_ids), ["mol_id", "smiles"]].copy()
-    selected["mol_id"] = selected["mol_id"].astype(int)
-    if selected["mol_id"].duplicated().any():
-        raise RuntimeError(f"{label} mol_df contains duplicate selected mol_id values")
-
-    found = set(int(x) for x in selected["mol_id"])
-    missing = sorted(wanted_ids - found)
+    missing = sorted(wanted_ids - set(out))
     if missing:
-        raise RuntimeError(f"{label} mol_ids missing from mol_df: {missing[:10]}")
-    if len(selected) != len(wanted_ids):
-        raise RuntimeError(
-            f"{label}: expected {len(wanted_ids)} selected rows, found {len(selected)}"
-        )
-
-    out = {
-        int(r.mol_id): str(r.smiles)
-        for r in selected[["mol_id", "smiles"]].itertuples(index=False)
-    }
-    del selected, ids, frame
-    gc.collect()
-    print(f"[{label}] retained {len(out)} requested structures; full table released", flush=True)
+        raise RuntimeError(f"{label} mol_ids missing from all_smiles.txt: {missing[:10]}")
+    print(f"[{label}] retained {len(out)} requested structures", flush=True)
     return out
 
 
@@ -84,7 +81,6 @@ def main() -> None:
         raise RuntimeError("frozen model has no training_queries")
     train_set = set(train_ids)
 
-    # Determine the lockbox truth IDs from the much smaller spectrum table first.
     print("[CASMI2022] loading spectrum table to identify positive-ion truths", flush=True)
     spec22 = pd.read_pickle(_find_one(args.casmi2022_root, "spec_df.pkl"))
     positive = spec22[spec22["prec_type"] == "[M+H]+"][["mol_id"]].copy()
@@ -95,10 +91,8 @@ def main() -> None:
     gc.collect()
     print(f"[CASMI2022] identified {len(truth_ids)} unique positive-ion truths", flush=True)
 
-    # Load and release each very large molecule table sequentially.  Never keep
-    # the full 2016 and 2022 molecular universes resident at the same time.
     map16 = _load_selected_smiles(
-        _find_one(args.casmi2016_root, "mol_df.pkl"), train_set, "CASMI2016"
+        _find_one(args.casmi2016_root, "all_smiles.txt"), train_set, "CASMI2016"
     )
 
     exact_to_train: dict[str, list[int]] = defaultdict(list)
@@ -113,7 +107,7 @@ def main() -> None:
     gc.collect()
 
     map22 = _load_selected_smiles(
-        _find_one(args.casmi2022_root, "mol_df.pkl"), truth_set, "CASMI2022"
+        _find_one(args.casmi2022_root, "all_smiles.txt"), truth_set, "CASMI2022"
     )
 
     rows = []
@@ -149,7 +143,8 @@ def main() -> None:
             "exact_identity_definition": "equality of standard RDKit InChIKey derived from processed canonical SMILES",
             "connectivity_identity_definition": "equality of the 14-character first block of the standard InChIKey",
             "effect_on_primary_analysis": "none; overlap labels are secondary sensitivity strata only",
-            "memory_policy": "large mol_df tables loaded sequentially; only predeclared truth/training IDs retained",
+            "structure_source": "MassFormer all_smiles.txt mol_id/SMILES export written directly from processed mol_df",
+            "memory_policy": "stream text molecular index; retain only predeclared truth/training IDs",
         },
         "counts": {
             "training_truth_molecules": int(len(train_ids)),
