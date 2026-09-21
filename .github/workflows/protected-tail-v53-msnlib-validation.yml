@@ -1,0 +1,135 @@
+name: protected-tail-v53-msnlib-validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [protected-tail-minimax-v53]
+    paths:
+      - '.github/workflows/protected-tail-v53-msnlib-validation.yml'
+      - 'scripts/export_msnlib_exact_condition_candidates.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protected-tail-v53-msnlib-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install project and verify frozen selector
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install pandas
+          PYTHONPATH=src pytest -q
+
+      - name: Download and verify open MSnLib OTAVA positive library
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p results/protected_tail_v53/msnlib
+          curl -L --fail --retry 3 --retry-delay 2 \
+            'https://zenodo.org/records/21105617/files/20241003_otavapep_pos_ms2.json?download=1' \
+            -o /tmp/msnlib.jsonl
+          echo '40379ce382fdc0622e313eb65e94937ac6f282f01be076e92d568683c5613db5  /tmp/msnlib.jsonl' | sha256sum -c -
+          test "$(wc -l < /tmp/msnlib.jsonl)" -eq 6670
+
+      - name: Export candidate-level exact-condition static and trajectory scores
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src python scripts/export_msnlib_exact_condition_candidates.py \
+            /tmp/msnlib.jsonl \
+            --out results/protected_tail_v53/msnlib/candidate_features.csv.gz \
+            --summary results/protected_tail_v53/msnlib/candidate_export_summary.json \
+            --validation-fraction 0.5
+
+      - name: Freeze formula-heldout validation candidate table
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          import pandas as pd
+          from pathlib import Path
+          src = Path('results/protected_tail_v53/msnlib/candidate_features.csv.gz')
+          out = Path('results/protected_tail_v53/msnlib/candidate_features_validation.csv.gz')
+          df = pd.read_csv(src)
+          val = df.loc[df['split'].eq('validation')].copy()
+          if val.empty:
+              raise SystemExit('empty formula-heldout validation candidate table')
+          if set(val['split']) != {'validation'}:
+              raise SystemExit('split contamination')
+          val.to_csv(out, index=False, compression='gzip')
+          print({'all_rows': len(df), 'validation_rows': len(val), 'validation_queries': val['spec_id'].nunique(),
+                 'validation_formulas': val['formula'].nunique(), 'validation_sha256': hashlib.sha256(out.read_bytes()).hexdigest()})
+          PY
+
+      - name: Apply frozen v5.3 on formula-heldout validation queries
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src python scripts/analyze_protected_tail_v53.py \
+            results/protected_tail_v53/msnlib/candidate_features_validation.csv.gz \
+            --out results/protected_tail_v53/msnlib/protected_tail_v53_validation.json \
+            --overlap-threshold 0.8 \
+            --protected-k 1 \
+            --overlap-k 10 \
+            --head-survival-slack 1 \
+            --rr-cutoff 25 \
+            --role formula_heldout_selector_external_validation
+
+      - name: Apply frozen v5.3 on all eligible MSnLib queries as sensitivity analysis
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src python scripts/analyze_protected_tail_v53.py \
+            results/protected_tail_v53/msnlib/candidate_features.csv.gz \
+            --out results/protected_tail_v53/msnlib/protected_tail_v53_all.json \
+            --overlap-threshold 0.8 \
+            --protected-k 1 \
+            --overlap-k 10 \
+            --head-survival-slack 1 \
+            --rr-cutoff 25 \
+            --role all_query_sensitivity_analysis
+
+      - name: Record provenance
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path('results/protected_tail_v53/msnlib/provenance.json').write_text(json.dumps({
+              'dataset': 'open MSnLib OTAVA positive library',
+              'input_sha256': '40379ce382fdc0622e313eb65e94937ac6f282f01be076e92d568683c5613db5',
+              'evaluation_role': 'formula-heldout internal validation external to the exact v5.3 selector',
+              'not_independent_external_library': True,
+              'expert': 'joint_mean exact-condition trajectory score',
+              'baseline': 'static_best exact-condition score',
+              'rule_version': 'protected-tail-v5.3-minimax-tail',
+              'git_sha': os.environ.get('GITHUB_SHA'),
+              'frozen_parameters': {
+                  'overlap_threshold': 0.8,
+                  'protected_k': 1,
+                  'overlap_k': 10,
+                  'head_survival_slack': 1,
+              },
+              'guardrail': 'No MSnLib outcome was used to retune the v5.3 selector in this workflow.',
+          }, indent=2) + '\n')
+          PY
+
+      - name: Upload candidate tables and validation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: protected-tail-v53-msnlib
+          path: results/protected_tail_v53/msnlib/
+          if-no-files-found: warn
+          retention-days: 90
