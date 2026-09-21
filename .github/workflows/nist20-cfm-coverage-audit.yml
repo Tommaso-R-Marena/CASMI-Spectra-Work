@@ -1,0 +1,93 @@
+name: nist20-cfm-coverage-audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [casmi-consensus-v3-development]
+    paths:
+      - 'scripts/audit_nist20_cfm_coverage.py'
+      - '.github/workflows/nist20-cfm-coverage-audit.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nist20-cfm-coverage-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install project and audit dependencies
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install pandas
+
+      - name: Run full test suite
+        run: PYTHONPATH=src pytest -q
+
+      - name: Download and verify NIST20 Outlier processed benchmark
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/nist20 /tmp/cfm results/nist20_cfm_audit
+          curl -L --fail --retry 3 --retry-delay 2 \
+            'https://zenodo.org/records/8399738/files/proc_nist20_outlier.tgz?download=1' \
+            -o /tmp/proc_nist20_outlier.tgz
+          echo 'dab95dd818a5bab14a22bee5551c861e  /tmp/proc_nist20_outlier.tgz' | md5sum -c -
+          tar -xzf /tmp/proc_nist20_outlier.tgz -C /tmp/nist20
+
+      - name: Download and verify CFM predictions and extract pCASMI table
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 --retry-delay 3 \
+            'https://zenodo.org/records/8399738/files/cfm.tgz?download=1' \
+            -o /tmp/cfm.tgz
+          echo '9091cbc446124dc947cb2a7b01fe9c98  /tmp/cfm.tgz' | md5sum -c -
+          CFM_MEMBER="$(tar -tzf /tmp/cfm.tgz | grep -E '(^|/)pcasmi_spec_df\.pkl$' | head -n1)"
+          test -n "$CFM_MEMBER"
+          printf '%s\n' "$CFM_MEMBER" | tee results/nist20_cfm_audit/cfm_member.txt
+          tar -xzf /tmp/cfm.tgz -C /tmp/cfm "$CFM_MEMBER"
+
+      - name: Run pre-ranking coverage audit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src python scripts/audit_nist20_cfm_coverage.py \
+            /tmp/nist20 /tmp/cfm \
+            --output results/nist20_cfm_audit/summary.json
+
+      - name: Persist coverage audit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp results/nist20_cfm_audit/summary.json benchmark_results/nist20_cfm_coverage_audit.json
+          printf '%s\n' \
+            'dab95dd818a5bab14a22bee5551c861e  proc_nist20_outlier.tgz' \
+            '9091cbc446124dc947cb2a7b01fe9c98  cfm.tgz' > \
+            benchmark_results/nist20_cfm_audit_input_md5.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add benchmark_results/nist20_cfm_coverage_audit.json benchmark_results/nist20_cfm_audit_input_md5.txt
+          git commit -m 'Record NIST20 CFM pre-ranking coverage audit'
+          git pull --rebase origin casmi-consensus-v3-development
+          git push origin HEAD:casmi-consensus-v3-development
+
+      - name: Upload audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nist20-cfm-coverage-audit
+          path: results/nist20_cfm_audit/
+          if-no-files-found: ignore
