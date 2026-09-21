@@ -1,0 +1,76 @@
+name: nist20-outlier-coverage-audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [nist20-outlier-v3]
+    paths:
+      - 'scripts/audit_nist20_outlier_cfm_coverage.py'
+      - '.github/workflows/nist20-outlier-coverage-audit.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nist20-outlier-coverage-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install pandas numpy
+      - name: Download and verify NIST20 Outlier
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/nist20 /tmp/cfm results/nist20_outlier_audit
+          curl -L --fail --retry 3 --retry-delay 2 \
+            'https://zenodo.org/records/8399738/files/proc_nist20_outlier.tgz?download=1' \
+            -o /tmp/proc_nist20_outlier.tgz
+          echo 'dab95dd818a5bab14a22bee5551c861e  /tmp/proc_nist20_outlier.tgz' | md5sum -c -
+          tar -xzf /tmp/proc_nist20_outlier.tgz -C /tmp/nist20
+      - name: Download and verify CFM predictions
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 --retry-delay 3 \
+            'https://zenodo.org/records/8399738/files/cfm.tgz?download=1' \
+            -o /tmp/cfm.tgz
+          echo '9091cbc446124dc947cb2a7b01fe9c98  /tmp/cfm.tgz' | md5sum -c -
+          MEMBER="$(tar -tzf /tmp/cfm.tgz | grep -E '(^|/)pcasmi_spec_df\.pkl$' | head -n1)"
+          test -n "$MEMBER"
+          tar -xzf /tmp/cfm.tgz -C /tmp/cfm "$MEMBER"
+      - name: Audit coverage only
+        run: |
+          python scripts/audit_nist20_outlier_cfm_coverage.py \
+            /tmp/nist20 /tmp/cfm \
+            --out results/nist20_outlier_audit/summary.json
+      - name: Persist coverage audit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp results/nist20_outlier_audit/summary.json benchmark_results/nist20_outlier_cfm_coverage.json
+          printf '%s\n' \
+            'dab95dd818a5bab14a22bee5551c861e  proc_nist20_outlier.tgz' \
+            '9091cbc446124dc947cb2a7b01fe9c98  cfm.tgz' > benchmark_results/nist20_outlier_input_md5.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add benchmark_results/nist20_outlier_cfm_coverage.json benchmark_results/nist20_outlier_input_md5.txt
+          git commit -m 'Record NIST20 Outlier CFM coverage audit'
+          git pull --rebase origin nist20-outlier-v3
+          git push origin HEAD:nist20-outlier-v3
+      - name: Upload audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nist20-outlier-coverage-audit
+          path: results/nist20_outlier_audit/
