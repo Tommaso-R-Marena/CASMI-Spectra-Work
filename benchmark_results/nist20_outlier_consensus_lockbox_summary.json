@@ -1,0 +1,276 @@
+{
+  "protocol": {
+    "dataset": "NIST20 Outlier / MassFormer pCASMI",
+    "dataset_role": "one-shot third-domain external lockbox; no NIST20 outcome-driven model changes permitted",
+    "candidate_spectra": "published pCASMI CFM predictions at 10/20/40 eV only; no measured candidate spectra",
+    "ion_scope": "[M+H]+",
+    "primary_candidate_prediction_coverage": 0.99,
+    "feature_names": [
+      "z_static_best",
+      "z_ordered_path",
+      "z_neg_energy_spread"
+    ],
+    "model_sha256": "5f5649d8e771babfbb817e780873d1b691b714ecc814c11cae46a9a5e2a871eb",
+    "frozen_weights": [
+      1.4171661743386215,
+      0.39159938218722734,
+      0.6792755094208587
+    ],
+    "frozen_gate_top_k": 10,
+    "frozen_gate_overlap_threshold": 0.2,
+    "candidate_order_invariance": "asserted for every method on every scored query",
+    "negative_control": "seeded within-query permutation of frozen expert scores before applying the same reliability gate",
+    "inference_block": "query_mol_id (truth molecule)",
+    "primary_unit": "one prospectively selected [M+H]+ spectrum per unique truth molecule",
+    "primary_selection_rule": "within each mol_id, choose lowest spec_id after stable sort by (mol_id, spec_id)",
+    "source_positive_mh_spectra": 3605,
+    "source_unique_truth_molecules": 300,
+    "no_nist20_tuning": true
+  },
+  "coverage": {
+    "positive_mh_spectra": 300,
+    "primary_scored_spectra": 300,
+    "primary_truth_blocks": 300,
+    "complete_cfm_molecules": 771138,
+    "excluded": {
+      "no_candidate_list": 0,
+      "truth_not_predicted": 0,
+      "coverage_below_0_99": 0
+    },
+    "coverage_min": 0.9988512349224583,
+    "coverage_median": 1.0,
+    "coverage_mean": 0.9999961707830748,
+    "full_coverage_scored_spectra": 299,
+    "source_positive_mh_spectra": 3605,
+    "source_unique_truth_molecules": 300
+  },
+  "primary_ge_0_99": {
+    "metrics": {
+      "static": {
+        "n": 300,
+        "n_truth_blocks": 300,
+        "mrr25": 0.07443435602420294,
+        "top1": 0.023451671183378504,
+        "top5": 0.12516178874137796,
+        "median_expected_rank": 106.0,
+        "pessimistic_mrr25_missing_above_truth": 0.07443435602420294,
+        "pessimistic_top1_missing_above_truth": 0.023451671183378504,
+        "pessimistic_top5_missing_above_truth": 0.12516178874137796
+      },
+      "expert": {
+        "n": 300,
+        "n_truth_blocks": 300,
+        "mrr25": 0.06373546076856233,
+        "top1": 0.022525745257452573,
+        "top5": 0.10188497296456217,
+        "median_expected_rank": 117.5,
+        "pessimistic_mrr25_missing_above_truth": 0.06373546076856233,
+        "pessimistic_top1_missing_above_truth": 0.022525745257452573,
+        "pessimistic_top5_missing_above_truth": 0.10188497296456217
+      },
+      "gated": {
+        "n": 300,
+        "n_truth_blocks": 300,
+        "mrr25": 0.07263598066884801,
+        "top1": 0.023729448961156276,
+        "top5": 0.1158082533878426,
+        "median_expected_rank": 91.25,
+        "pessimistic_mrr25_missing_above_truth": 0.07263598066884801,
+        "pessimistic_top1_missing_above_truth": 0.023729448961156276,
+        "pessimistic_top5_missing_above_truth": 0.1158082533878426
+      },
+      "permuted_control": {
+        "n": 300,
+        "n_truth_blocks": 300,
+        "mrr25": 0.07107927087626223,
+        "top1": 0.022896115627822948,
+        "top5": 0.11597131255090176,
+        "median_expected_rank": 112.75,
+        "pessimistic_mrr25_missing_above_truth": 0.07107927087626223,
+        "pessimistic_top1_missing_above_truth": 0.022896115627822948,
+        "pessimistic_top5_missing_above_truth": 0.11597131255090176
+      }
+    },
+    "risk": {
+      "expert": {
+        "rr_wins": 43,
+        "rr_losses": 53,
+        "rr_ties": 204,
+        "delta_mrr": -0.010698895255640621,
+        "delta_top1": -0.000925925925925927,
+        "delta_top5": -0.023276815776815774,
+        "catastrophic_static_top3_to_below25": 5,
+        "catastrophic_static_top5_to_below25": 9
+      },
+      "gated": {
+        "rr_wins": 32,
+        "rr_losses": 32,
+        "rr_ties": 236,
+        "delta_mrr": -0.0017983753553549376,
+        "delta_top1": 0.0002777777777777768,
+        "delta_top5": -0.009353535353535352,
+        "catastrophic_static_top3_to_below25": 1,
+        "catastrophic_static_top5_to_below25": 2
+      },
+      "permuted_control": {
+        "rr_wins": 4,
+        "rr_losses": 13,
+        "rr_ties": 283,
+        "delta_mrr": -0.003355085147940707,
+        "delta_top1": -0.0005555555555555557,
+        "delta_top5": -0.00919047619047619,
+        "catastrophic_static_top3_to_below25": 0,
+        "catastrophic_static_top5_to_below25": 0
+      }
+    },
+    "inference": {
+      "gated_vs_static": {
+        "bootstrap": {
+          "delta": -0.0017983753553549376,
+          "ci_low": -0.016451246483655653,
+          "ci_high": 0.013096430786613223,
+          "n": 300,
+          "n_blocks": 300,
+          "seed": 20260922,
+          "n_boot": 100000,
+          "resampling_unit": "block"
+        },
+        "signflip": {
+          "delta": -0.0017983753553549376,
+          "p_value_two_sided": 0.8135963728072544,
+          "n": 300,
+          "n_blocks": 300,
+          "mode": "monte_carlo",
+          "n_permutations": 500000,
+          "seed": 20260923,
+          "extreme": 406798
+        }
+      },
+      "expert_vs_static": {
+        "bootstrap": {
+          "delta": -0.010698895255640621,
+          "ci_low": -0.029378766737978904,
+          "ci_high": 0.008135925342773308,
+          "n": 300,
+          "n_blocks": 300,
+          "seed": 20261922,
+          "n_boot": 100000,
+          "resampling_unit": "block"
+        },
+        "signflip": {
+          "delta": -0.010698895255640621,
+          "p_value_two_sided": 0.2633414733170534,
+          "n": 300,
+          "n_blocks": 300,
+          "mode": "monte_carlo",
+          "n_permutations": 500000,
+          "seed": 20261923,
+          "extreme": 131670
+        }
+      },
+      "permuted_control_vs_static": {
+        "bootstrap": {
+          "delta": -0.003355085147940707,
+          "ci_low": -0.011738837439093902,
+          "ci_high": 0.005125866679100876,
+          "n": 300,
+          "n_blocks": 300,
+          "seed": 20262922,
+          "n_boot": 100000,
+          "resampling_unit": "block"
+        },
+        "signflip": {
+          "delta": -0.003355085147940707,
+          "p_value_two_sided": 0.4524730950538099,
+          "n": 300,
+          "n_blocks": 300,
+          "mode": "monte_carlo",
+          "n_permutations": 500000,
+          "seed": 20262923,
+          "extreme": 226236
+        }
+      }
+    },
+    "expert_usage_fraction": 0.5,
+    "replication_gate": {
+      "delta_mrr_positive": false,
+      "bootstrap_95pct_lower_bound_positive": false,
+      "two_sided_signflip_p_lt_0_05": false,
+      "top1_noninferior": true,
+      "zero_static_top3_to_below25_catastrophes": false,
+      "real_delta_mrr_exceeds_permuted_control": true,
+      "pass": false
+    }
+  },
+  "full_coverage_sensitivity": {
+    "metrics": {
+      "static": {
+        "n": 299,
+        "n_truth_blocks": 299,
+        "mrr25": 0.07468330035873205,
+        "top1": 0.02353010486626606,
+        "top5": 0.12558039004151633,
+        "median_expected_rank": 105.5,
+        "pessimistic_mrr25_missing_above_truth": 0.07468330035873205,
+        "pessimistic_top1_missing_above_truth": 0.02353010486626606,
+        "pessimistic_top5_missing_above_truth": 0.12558039004151633
+      },
+      "expert": {
+        "n": 299,
+        "n_truth_blocks": 299,
+        "mrr25": 0.06394862284471137,
+        "top1": 0.022601082198112948,
+        "top5": 0.10222572538250385,
+        "median_expected_rank": 117.5,
+        "pessimistic_mrr25_missing_above_truth": 0.06394862284471137,
+        "pessimistic_top1_missing_above_truth": 0.022601082198112948,
+        "pessimistic_top5_missing_above_truth": 0.10222572538250385
+      },
+      "gated": {
+        "n": 299,
+        "n_truth_blocks": 299,
+        "mrr25": 0.07287891037008162,
+        "top1": 0.023808811666711983,
+        "top5": 0.11619557196104609,
+        "median_expected_rank": 92.0,
+        "pessimistic_mrr25_missing_above_truth": 0.07287891037008162,
+        "pessimistic_top1_missing_above_truth": 0.023808811666711983,
+        "pessimistic_top5_missing_above_truth": 0.11619557196104609
+      },
+      "permuted_control": {
+        "n": 299,
+        "n_truth_blocks": 299,
+        "mrr25": 0.07131699419022966,
+        "top1": 0.022972691265374195,
+        "top5": 0.11635917647247668,
+        "median_expected_rank": 112.5,
+        "pessimistic_mrr25_missing_above_truth": 0.07131699419022966,
+        "pessimistic_top1_missing_above_truth": 0.022972691265374195,
+        "pessimistic_top5_missing_above_truth": 0.11635917647247668
+      }
+    },
+    "gated_vs_static_inference": {
+      "bootstrap": {
+        "delta": -0.001804389988650439,
+        "ci_low": -0.016342781662692187,
+        "ci_high": 0.013148588216513074,
+        "n": 299,
+        "n_blocks": 299,
+        "seed": 20263922,
+        "n_boot": 100000,
+        "resampling_unit": "block"
+      },
+      "signflip": {
+        "delta": -0.001804389988650439,
+        "p_value_two_sided": 0.8142043715912568,
+        "n": 299,
+        "n_blocks": 299,
+        "mode": "monte_carlo",
+        "n_permutations": 500000,
+        "seed": 20263923,
+        "extreme": 407102
+      }
+    }
+  },
+  "interpretation_guardrail": "A passing gate is independent evidence that the CASMI-2016-frozen energy-consensus ranker transfers to a third data domain (NIST20 Outlier) conditional on the published pCASMI CFM candidate spectra, candidate lists, and the prospectively fixed molecule-balanced query selection. It does not prove universal small-molecule identification, perfect candidate generation, negative-ion generalization, or invariance to prediction model and instrument domain."
+}
