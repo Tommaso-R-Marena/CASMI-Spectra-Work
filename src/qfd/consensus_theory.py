@@ -13,17 +13,19 @@ def subgaussian_consensus_pair_failure_bound(
     """Chernoff upper bound for one decoy beating the truth by consensus sum.
 
     Let X_e = s_e(truth) - s_e(decoy). Assume the centered margin vector is
-    jointly sub-Gaussian with covariance proxy Sigma, i.e.
+    jointly sub-Gaussian with positive-semidefinite covariance proxy Sigma:
 
         E exp(u^T (X-mu)) <= exp(0.5 * u^T Sigma u)
 
-    for all u. If sum(mu)>0, then
+    for all u. If 1^T mu > 0, then
 
-        P(sum_e X_e <= 0)
+        P(1^T X <= 0)
           <= exp(-(1^T mu)^2 / (2 * 1^T Sigma 1)).
 
-    The function returns 1 when the assumptions do not imply a nontrivial
-    positive-margin bound (nonpositive mean sum or degenerate variance proxy).
+    A nonpositive aggregate mean gives only the vacuous bound 1. If the
+    aggregate variance proxy is exactly zero while the aggregate mean is
+    positive, the sum is deterministic under the stated sub-Gaussian proxy and
+    the failure probability is zero.
     """
     mu = np.asarray(mean_margin, dtype=float)
     sigma = np.asarray(covariance_proxy, dtype=float)
@@ -35,12 +37,18 @@ def subgaussian_consensus_pair_failure_bound(
         raise ValueError("finite inputs required")
     if not np.allclose(sigma, sigma.T, atol=1e-12, rtol=0.0):
         raise ValueError("covariance_proxy must be symmetric")
+    if float(np.min(np.linalg.eigvalsh(sigma))) < -1e-10:
+        raise ValueError("covariance_proxy must be positive semidefinite")
 
     ones = np.ones(mu.size, dtype=float)
     mean_sum = float(ones @ mu)
     var_proxy = float(ones @ sigma @ ones)
-    if mean_sum <= 0.0 or var_proxy <= 0.0:
+    if mean_sum <= 0.0:
         return 1.0
+    if var_proxy < -1e-10:
+        raise ValueError("covariance proxy gives a negative aggregate variance")
+    if var_proxy <= 1e-15:
+        return 0.0
     exponent = -(mean_sum * mean_sum) / (2.0 * var_proxy)
     return float(min(1.0, math.exp(exponent)))
 
@@ -51,9 +59,9 @@ def subgaussian_consensus_top1_failure_bound(
 ) -> float:
     """Union-bound probability that any supplied decoy beats the truth.
 
-    Each entry describes the truth-minus-decoy margin vector and its joint
-    sub-Gaussian covariance proxy. No independence between *different decoys*
-    is required for this union bound.
+    Each entry describes a truth-minus-decoy margin vector and its joint
+    sub-Gaussian covariance proxy. No independence between different decoys is
+    required for the union bound.
     """
     if len(mean_margins) != len(covariance_proxies):
         raise ValueError("one covariance proxy is required per decoy")
@@ -76,6 +84,11 @@ def iid_consensus_top1_failure_bound(
     margin mu, and per-condition sub-Gaussian scale sigma,
 
         P(truth is not Top-1) <= (N-1) exp(-m mu^2/(2 sigma^2)).
+
+    This is a conditional statistical theorem, not an unconditional guarantee
+    about molecular identification. Its usefulness depends on positive margins
+    and on the stated sub-Gaussian model being appropriate to the deployment
+    distribution.
     """
     n_candidates = int(n_candidates)
     n_conditions = int(n_conditions)
@@ -104,7 +117,8 @@ def bounded_correction_order_is_protected(
     """Whether a pairwise baseline order is guaranteed under bounded fusion.
 
     For scores B_i + alpha h_i with h_i in [-1,1], candidate i cannot be
-    reordered below j whenever B_i-B_j > 2*alpha.
+    reordered below j whenever B_i-B_j > 2*alpha. Equality is intentionally
+    not declared protected because the worst-case correction can create a tie.
     """
     gap = float(baseline_gap)
     alpha = float(correction_amplitude)
@@ -117,16 +131,15 @@ def selective_utility_gain(
     gate_probability: float,
     conditional_expert_minus_baseline_utility: float,
 ) -> float:
-    """Exact expected gain identity for a binary selective expert gate.
+    """Exact expected-gain identity for a binary selective expert gate.
 
-    If G is the event that the expert is used, then
+    If G is the event that the expert is used and the baseline is used on G^c,
 
         E[U_selective-U_baseline]
           = P(G) E[U_expert-U_baseline | G].
 
-    This function evaluates the right-hand side. The identity by itself does
-    not guarantee a positive gain; the conditional utility difference must be
-    positive on the gate-selected region.
+    The identity by itself does not imply a positive gain: the conditional
+    expert advantage on the gate-selected region must itself be positive.
     """
     p = float(gate_probability)
     delta = float(conditional_expert_minus_baseline_utility)
