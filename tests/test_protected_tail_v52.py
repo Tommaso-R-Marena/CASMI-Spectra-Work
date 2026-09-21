@@ -136,7 +136,7 @@ def test_v52_decision_and_scores_are_candidate_permutation_equivariant():
             head_survival_slack=1,
         )
         scores, overlap, used, protected, survives, max_rank = result
-        assert overlap == base_overlap
+        assert np.isclose(overlap, base_overlap, rtol=0.0, atol=1e-15)
         assert used == base_used
         assert survives == base_survives
         assert max_rank == base_max_rank
@@ -146,7 +146,9 @@ def test_v52_decision_and_scores_are_candidate_permutation_equivariant():
 
 def test_v52_overlap_gate_is_permutation_equivariant_at_cutoff_ties():
     # Both score vectors have cutoff ties crossing top-3. The gate must be
-    # independent of arbitrary candidate row order.
+    # independent of arbitrary candidate row order. The overlap itself is a
+    # floating expectation and may differ at the final machine bit because
+    # permutation changes summation order, so compare it at machine precision.
     static = np.array([10.0, 9.0, 8.0, 8.0, 8.0, 1.0])
     expert = np.array([10.0, 8.0, 9.0, 8.0, 8.0, 1.0])
     baseline = protected_tail_v52_scores(
@@ -169,7 +171,7 @@ def test_v52_overlap_gate_is_permutation_equivariant_at_cutoff_ties():
             overlap_k=3,
             head_survival_slack=10,
         )
-        assert result[1] == baseline[1]
+        assert np.isclose(result[1], baseline[1], rtol=0.0, atol=1e-15)
         assert result[2] == baseline[2]
         assert np.array_equal(result[3][inv], baseline[3])
         assert np.array_equal(result[0][inv], baseline[0])
