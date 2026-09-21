@@ -145,6 +145,56 @@ def topk_overlap_fraction(a: Iterable[float], b: Iterable[float], *, k: int = 10
     return float(len(ia & ib) / kk)
 
 
+def _tie_aware_topk_membership(scores: Iterable[float], *, k: int) -> np.ndarray:
+    """Order-invariant fractional membership in a descending top-k set.
+
+    Candidates strictly above the kth score receive weight 1, candidates below
+    it receive 0, and candidates tied at the cutoff split the remaining top-k
+    capacity equally. The weights therefore sum exactly to min(k, n).
+    """
+    s = np.asarray(list(scores), dtype=float)
+    if s.ndim != 1 or s.size == 0 or not np.all(np.isfinite(s)):
+        raise ValueError("finite non-empty score vector required")
+    kk = min(int(k), int(s.size))
+    if kk < 1:
+        raise ValueError("k must be positive")
+    cutoff = float(np.sort(s)[-kk])
+    above = s > cutoff
+    tied = s == cutoff
+    remaining = kk - int(np.sum(above))
+    tied_count = int(np.sum(tied))
+    if not 0 < remaining <= tied_count:
+        raise RuntimeError("invalid tie-aware top-k cutoff accounting")
+    out = np.zeros(s.size, dtype=float)
+    out[above] = 1.0
+    out[tied] = float(remaining / tied_count)
+    return out
+
+
+def tie_aware_topk_overlap_fraction(
+    a: Iterable[float], b: Iterable[float], *, k: int = 10
+) -> float:
+    """Order-invariant expected top-k overlap under uniform cutoff tie breaks.
+
+    Each score vector is represented by fractional top-k membership. Their
+    fuzzy-set intersection, sum(min(w_a, w_b)), divided by k gives a value in
+    [0, 1]. When neither vector has a tie crossing the cutoff this is exactly
+    the ordinary |TopK(a) ∩ TopK(b)| / k overlap.
+    """
+    av = np.asarray(list(a), dtype=float)
+    bv = np.asarray(list(b), dtype=float)
+    if av.shape != bv.shape or av.ndim != 1 or av.size == 0:
+        raise ValueError("aligned non-empty score vectors required")
+    if not np.all(np.isfinite(av)) or not np.all(np.isfinite(bv)):
+        raise ValueError("finite score vectors required")
+    kk = min(int(k), int(av.size))
+    if kk < 1:
+        raise ValueError("k must be positive")
+    wa = _tie_aware_topk_membership(av, k=kk)
+    wb = _tie_aware_topk_membership(bv, k=kk)
+    return float(np.sum(np.minimum(wa, wb)) / kk)
+
+
 def selective_consensus_scores(
     static_scores: Iterable[float],
     expert_scores: Iterable[float],
@@ -174,10 +224,12 @@ def protected_tail_consensus_scores(
 ) -> tuple[np.ndarray, float, bool, np.ndarray]:
     """Safely rerank only the tail below a tie-closed static top-k prefix.
 
-    If static/expert top-``overlap_k`` overlap is below ``overlap_threshold``,
-    the static scores are returned unchanged. Otherwise the static top
-    ``protected_k`` prefix is frozen, including every candidate tied at its
-    cutoff, and only the remaining candidates are ordered by the expert.
+    The protected-tail gate uses order-invariant, tie-aware fractional overlap
+    between static and expert top-``overlap_k`` memberships. If that overlap is
+    below ``overlap_threshold``, the static scores are returned unchanged.
+    Otherwise the static top ``protected_k`` prefix is frozen, including every
+    candidate tied at its cutoff, and only the remaining candidates are ordered
+    by the expert.
 
     Returned scores are rank-surrogate scores rather than a numerical blend:
     every protected candidate is above every tail candidate, static ordering
@@ -199,7 +251,7 @@ def protected_tail_consensus_scores(
     if pk < 1:
         raise ValueError("protected_k must be positive")
 
-    overlap = topk_overlap_fraction(static, expert, k=overlap_k)
+    overlap = tie_aware_topk_overlap_fraction(static, expert, k=overlap_k)
     use_expert = bool(overlap >= float(overlap_threshold))
 
     static_order = np.argsort(-static, kind="stable")
