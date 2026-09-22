@@ -1,0 +1,54 @@
+name: mcediv-energy-triplet-feasibility
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [mcediv-energy-triplet-feasibility]
+    paths:
+      - '.github/workflows/mcediv-energy-triplet-feasibility.yml'
+      - 'scripts/audit_msnlib_energy_triplets.py'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install and test
+        run: |
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+
+      - name: Download pinned MCEDIV library
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p results/mcediv_triplet_feasibility
+          curl -L --fail --retry 4 --retry-delay 3 \
+            'https://zenodo.org/records/21105617/files/20250828_mcediv_50k_sub_pos_ms2.json?download=1' \
+            -o /tmp/mcediv.jsonl
+          echo 'c4b7a8e4348b6c4181fc51167cf453a3  /tmp/mcediv.jsonl' | md5sum -c -
+
+      - name: Run label-free energy triplet audit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_msnlib_energy_triplets.py \
+            /tmp/mcediv.jsonl \
+            --dataset mcediv_50k_sub \
+            --out results/mcediv_triplet_feasibility/audit.json
+
+      - name: Upload metadata-only audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcediv-energy-triplet-feasibility
+          path: results/mcediv_triplet_feasibility/
+          retention-days: 90
