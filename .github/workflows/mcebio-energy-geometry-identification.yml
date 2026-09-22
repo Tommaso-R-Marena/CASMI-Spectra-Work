@@ -1,0 +1,89 @@
+name: mcebio-energy-geometry-identification
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v53-independent-msnlib-lockboxes]
+    paths:
+      - '.github/workflows/mcebio-energy-geometry-identification.yml'
+
+permissions:
+  contents: read
+
+env:
+  FROZEN_IDENTIFICATION_SHA: 7c5b1386fc524559df7bd8971d6341bfa7e657e1
+  DATASET_FILE: 20241003_mcebio_pos_ms2.json
+  DATASET_MD5: 806f33c9c60af74a0aa21fb66aeb84f3
+
+jobs:
+  identify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify frozen identification implementation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin "$FROZEN_IDENTIFICATION_SHA"
+          git diff --exit-code "$FROZEN_IDENTIFICATION_SHA" -- \
+            docs/ENERGY_GEOMETRY_IDENTIFICATION_PROTOCOL.md \
+            src/qfd/power_geometry.py \
+            tests/test_power_geometry.py \
+            scripts/benchmark_msnlib_energy_geometry_identification.py
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Download and verify pinned MCEBIO
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p results/energy_geometry_identification/mcebio
+          curl -L --fail --retry 4 --retry-delay 3 \
+            "https://zenodo.org/records/21105617/files/${DATASET_FILE}?download=1" \
+            -o /tmp/mcebio.jsonl
+          echo "${DATASET_MD5}  /tmp/mcebio.jsonl" | md5sum -c -
+          sha256sum /tmp/mcebio.jsonl | tee results/energy_geometry_identification/mcebio/input_sha256.txt
+      - name: Run frozen formula-disjoint identification benchmark
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/benchmark_msnlib_energy_geometry_identification.py \
+            /tmp/mcebio.jsonl \
+            --dataset mcebio_pos \
+            --seed 20260922 \
+            --out results/energy_geometry_identification/mcebio/result.json
+      - name: Record provenance
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path('results/energy_geometry_identification/mcebio')
+          root.mkdir(parents=True,exist_ok=True)
+          inp=Path('/tmp/mcebio.jsonl')
+          p={
+            'dataset':'MCEBIO positive-mode MS2',
+            'zenodo_record':'21105617',
+            'filename':os.environ['DATASET_FILE'],
+            'expected_md5':os.environ['DATASET_MD5'],
+            'input_sha256':hashlib.sha256(inp.read_bytes()).hexdigest() if inp.exists() else None,
+            'frozen_identification_sha':os.environ['FROZEN_IDENTIFICATION_SHA'],
+            'workflow_git_sha':os.environ.get('GITHUB_SHA'),
+            'analysis_status':'formula-disjoint mechanism identification; discovery-only tuning',
+          }
+          (root/'provenance.json').write_text(json.dumps(p,indent=2)+'\n')
+          PY
+      - name: Upload identification artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcebio-energy-geometry-identification
+          path: results/energy_geometry_identification/mcebio/
+          if-no-files-found: warn
+          retention-days: 90
