@@ -55,6 +55,16 @@ def _parse_inchikey(lines: list[str]) -> str:
     return ""
 
 
+def _connectivity_key_from_file(path: Path) -> str:
+    """Read identity independently of collision-energy/adduct scoring scope."""
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    inchikey = _parse_inchikey(lines)
+    return inchikey.split("-")[0] if inchikey else ""
+
+
 def parse_record(path: Path, root: Path) -> Record | None:
     try:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -83,7 +93,11 @@ def parse_record(path: Path, root: Path) -> Record | None:
 
 
 def _in_scope(r: Record) -> bool:
-    return r.ms_type.upper() == "MS2" and r.ion_mode.upper() == "POSITIVE" and r.precursor_type.replace(" ", "") == "[M+H]+"
+    return (
+        r.ms_type.upper() == "MS2"
+        and r.ion_mode.upper() == "POSITIVE"
+        and r.precursor_type.replace(" ", "") == "[M+H]+"
+    )
 
 
 def _is_energy(x: float, target: float) -> bool:
@@ -94,38 +108,91 @@ def _quantiles(values: list[int]) -> dict[str, float | int | None]:
     if not values:
         return {"min": None, "q25": None, "median": None, "q75": None, "max": None, "mean": None}
     xs = sorted(values)
+
     def q(p: float) -> float:
         if len(xs) == 1:
             return float(xs[0])
-        z = p * (len(xs) - 1); lo = int(math.floor(z)); hi = int(math.ceil(z))
+        z = p * (len(xs) - 1)
+        lo = int(math.floor(z))
+        hi = int(math.ceil(z))
         if lo == hi:
             return float(xs[lo])
         a = z - lo
-        return float((1-a)*xs[lo] + a*xs[hi])
-    return {"min": xs[0], "q25": q(.25), "median": q(.5), "q75": q(.75), "max": xs[-1], "mean": float(sum(xs)/len(xs))}
+        return float((1 - a) * xs[lo] + a * xs[hi])
+
+    return {
+        "min": xs[0],
+        "q25": q(0.25),
+        "median": q(0.5),
+        "q75": q(0.75),
+        "max": xs[-1],
+        "mean": float(sum(xs) / len(xs)),
+    }
 
 
 def _tree_hash(paths: list[Path], root: Path) -> str:
     h = hashlib.sha256()
     for p in sorted(paths, key=lambda p: str(p.relative_to(root))):
         rel = str(p.relative_to(root)).replace("\\", "/")
-        h.update(rel.encode()); h.update(b"\0")
-        h.update(hashlib.sha256(p.read_bytes()).hexdigest().encode()); h.update(b"\n")
+        h.update(rel.encode())
+        h.update(b"\0")
+        h.update(hashlib.sha256(p.read_bytes()).hexdigest().encode())
+        h.update(b"\n")
     return h.hexdigest()
 
 
-def build_audit(current_root: Path, baseline_root: Path, added_paths: set[str], *, current_sha: str, baseline_sha: str) -> tuple[dict, list[dict]]:
+def _normalize_relpath(path: str) -> str:
+    p = path.strip().replace("\\", "/")
+    while p.startswith("./"):
+        p = p[2:]
+    return p
+
+
+def build_audit(
+    current_root: Path,
+    baseline_root: Path,
+    added_paths: set[str],
+    *,
+    current_sha: str,
+    baseline_sha: str,
+) -> tuple[dict, list[dict]]:
     current_paths = sorted(current_root.rglob("*.txt"))
     baseline_paths = sorted(baseline_root.rglob("*.txt"))
-    current_records = [r for p in current_paths if (r := parse_record(p, current_root)) is not None and _in_scope(r)]
-    baseline_records = [r for p in baseline_paths if (r := parse_record(p, baseline_root)) is not None and _in_scope(r)]
-    baseline_structures = {r.connectivity_key for r in baseline_records}
+    current_rel = {str(p.relative_to(current_root)).replace("\\", "/") for p in current_paths}
+    clean_added_paths = {
+        _normalize_relpath(p)
+        for p in added_paths
+        if _normalize_relpath(p).endswith(".txt")
+    }
+    missing_added = sorted(clean_added_paths - current_rel)
+    if missing_added:
+        raise ValueError(
+            f"added-path list contains {len(missing_added)} paths absent from current tree; "
+            f"first={missing_added[0]!r}"
+        )
 
-    # Strict temporal query provenance: only paths classified A(dded) by git with rename detection enabled.
-    added_records = [r for r in current_records if r.path in added_paths]
+    current_records = [
+        r for p in current_paths if (r := parse_record(p, current_root)) is not None and _in_scope(r)
+    ]
+    baseline_records = [
+        r for p in baseline_paths if (r := parse_record(p, baseline_root)) is not None and _in_scope(r)
+    ]
+
+    # Novelty is stricter than scoring scope: any baseline appearance of the
+    # 2D connectivity key disqualifies a structure as novel, even if that old
+    # record used another ion mode/adduct or lacked a usable collision energy.
+    baseline_structures_any_scope = {
+        key for p in baseline_paths if (key := _connectivity_key_from_file(p))
+    }
+
+    # Strict temporal provenance: only paths classified A(dded) by git with
+    # rename detection enabled can become held-out queries. Modified or renamed
+    # pre-existing records are excluded by construction.
+    added_records = [r for r in current_records if r.path in clean_added_paths]
     new_query_records = [r for r in added_records if _is_energy(r.collision_energy_ev, QUERY_ENERGY)]
 
-    # Current pinned candidate library; references never use the held-out 30 eV query energy.
+    # Current pinned candidate library; references never use the held-out 30 eV
+    # query energy and remain fixed at the v5.3 10/20/40 geometry.
     by_structure: dict[str, list[Record]] = defaultdict(list)
     for r in current_records:
         by_structure[r.connectivity_key].append(r)
@@ -139,7 +206,10 @@ def build_audit(current_root: Path, baseline_root: Path, added_paths: set[str], 
         structure_formula[key] = formulas[0]
         refs: dict[float, Record] = {}
         for e in REFERENCE_ENERGIES:
-            cands = sorted((r for r in rows if _is_energy(r.collision_energy_ev, e)), key=lambda r: (r.accession, r.path))
+            cands = sorted(
+                (r for r in rows if _is_energy(r.collision_energy_ev, e)),
+                key=lambda r: (r.accession, r.path),
+            )
             if cands:
                 refs[e] = cands[0]
         if len(refs) == len(REFERENCE_ENERGIES):
@@ -164,31 +234,37 @@ def build_audit(current_root: Path, baseline_root: Path, added_paths: set[str], 
         if len(pool) < 2:
             continue
         refs = complete_refs[key]
-        manifest.append({
-            "formula": formula,
-            "truth_connectivity_key": key,
-            "query_accession": q.accession,
-            "query_path": q.path,
-            "query_energy_ev": QUERY_ENERGY,
-            "structure_novel_at_baseline": key not in baseline_structures,
-            "candidate_count": len(pool),
-            "candidate_connectivity_keys": ";".join(pool),
-            "truth_ref_10_path": refs[10.0].path,
-            "truth_ref_20_path": refs[20.0].path,
-            "truth_ref_40_path": refs[40.0].path,
-            "instrument": q.instrument,
-            "instrument_type": q.instrument_type,
-            "date": q.date,
-        })
+        manifest.append(
+            {
+                "formula": formula,
+                "truth_connectivity_key": key,
+                "query_accession": q.accession,
+                "query_path": q.path,
+                "query_energy_ev": QUERY_ENERGY,
+                "structure_novel_at_baseline": key not in baseline_structures_any_scope,
+                "candidate_count": len(pool),
+                "candidate_connectivity_keys": ";".join(pool),
+                "truth_ref_10_path": refs[10.0].path,
+                "truth_ref_20_path": refs[20.0].path,
+                "truth_ref_40_path": refs[40.0].path,
+                "instrument": q.instrument,
+                "instrument_type": q.instrument_type,
+                "date": q.date,
+            }
+        )
 
     def cohort(rows: list[dict]) -> dict:
         pools = [int(r["candidate_count"]) for r in rows]
+        thresholds = (("ge_2", 2), ("ge_5", 5), ("ge_10", 10), ("ge_20", 20))
         return {
             "queries": len(rows),
             "formula_blocks": len({r["formula"] for r in rows}),
             "pool_size": _quantiles(pools),
-            "queries_by_min_pool_size": {k: sum(n >= t for n in pools) for k, t in (("ge_2",2),("ge_5",5),("ge_10",10),("ge_20",20))},
-            "formula_blocks_by_min_pool_size": {k: len({r["formula"] for r in rows if int(r["candidate_count"]) >= t}) for k, t in (("ge_2",2),("ge_5",5),("ge_10",10),("ge_20",20))},
+            "queries_by_min_pool_size": {k: sum(n >= t for n in pools) for k, t in thresholds},
+            "formula_blocks_by_min_pool_size": {
+                k: len({r["formula"] for r in rows if int(r["candidate_count"]) >= t})
+                for k, t in thresholds
+            },
         }
 
     novel_rows = [r for r in manifest if bool(r["structure_novel_at_baseline"])]
@@ -201,11 +277,12 @@ def build_audit(current_root: Path, baseline_root: Path, added_paths: set[str], 
             "current_sha": current_sha,
             "baseline_txt_files": len(baseline_paths),
             "current_txt_files": len(current_paths),
-            "strict_git_added_txt_paths": len(added_paths),
+            "strict_git_added_txt_paths": len(clean_added_paths),
             "current_tree_sha256": _tree_hash(current_paths, current_root),
             "baseline_tree_sha256": _tree_hash(baseline_paths, baseline_root),
             "in_scope_current_records": len(current_records),
             "in_scope_baseline_records": len(baseline_records),
+            "baseline_structures_any_scope": len(baseline_structures_any_scope),
             "strict_git_added_in_scope_records": len(added_records),
             "added_directory_counts": dict(sorted(directory_counts.items())),
         },
@@ -216,6 +293,7 @@ def build_audit(current_root: Path, baseline_root: Path, added_paths: set[str], 
             "query_energy_ev": QUERY_ENERGY,
             "scope": "MS2, POSITIVE, [M+H]+",
             "structure_identity": "first InChIKey block (2D connectivity)",
+            "novel_structure_rule": "connectivity key absent from every baseline .txt record, irrespective of scoring scope",
             "ranking_scores_computed": False,
             "hierarchy": ["novel_structure", "added_spectrum"],
         },
@@ -228,6 +306,7 @@ def build_audit(current_root: Path, baseline_root: Path, added_paths: set[str], 
         },
         "guardrails": {
             "label_free": True,
+            "renames_and_modifications_excluded_by_git_diff": True,
             "selector_frozen": {
                 "frozen_parent_sha": "0006c7f81c7dfac53da48690ca0fe627108b9767",
                 "overlap_threshold": 0.8,
@@ -251,14 +330,42 @@ def main() -> None:
     p.add_argument("--out-json", type=Path, required=True)
     p.add_argument("--out-manifest", type=Path, required=True)
     args = p.parse_args()
-    added_paths = {line.strip().replace("\\", "/") for line in args.added_paths_file.read_text().splitlines() if line.strip().endswith(".txt")}
-    summary, manifest = build_audit(args.current_root, args.baseline_root, added_paths, current_sha=args.current_sha, baseline_sha=args.baseline_sha)
+    added_paths = {
+        line.strip().replace("\\", "/")
+        for line in args.added_paths_file.read_text(encoding="utf-8").splitlines()
+        if line.strip().endswith(".txt")
+    }
+    summary, manifest = build_audit(
+        args.current_root,
+        args.baseline_root,
+        added_paths,
+        current_sha=args.current_sha,
+        baseline_sha=args.baseline_sha,
+    )
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     import csv
-    fields = list(manifest[0]) if manifest else ["formula","truth_connectivity_key","query_accession","query_path","query_energy_ev","structure_novel_at_baseline","candidate_count","candidate_connectivity_keys","truth_ref_10_path","truth_ref_20_path","truth_ref_40_path","instrument","instrument_type","date"]
+
+    fields = list(manifest[0]) if manifest else [
+        "formula",
+        "truth_connectivity_key",
+        "query_accession",
+        "query_path",
+        "query_energy_ev",
+        "structure_novel_at_baseline",
+        "candidate_count",
+        "candidate_connectivity_keys",
+        "truth_ref_10_path",
+        "truth_ref_20_path",
+        "truth_ref_40_path",
+        "instrument",
+        "instrument_type",
+        "date",
+    ]
     with args.out_manifest.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fields); w.writeheader(); w.writerows(manifest)
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        w.writerows(manifest)
     print(json.dumps(summary, indent=2, sort_keys=True))
 
 
