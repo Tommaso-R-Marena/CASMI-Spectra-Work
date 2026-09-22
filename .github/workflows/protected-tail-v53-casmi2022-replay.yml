@@ -1,0 +1,162 @@
+name: protected-tail-v53-casmi2022-replay
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [protected-tail-minimax-v53]
+    paths:
+      - '.github/workflows/protected-tail-v53-casmi2022-replay.yml'
+      - 'scripts/verify_casmi2022_v51_semantic_identity.py'
+      - 'scripts/analyze_protected_tail_v53.py'
+      - 'src/qfd/consensus_ranker.py'
+      - 'src/qfd/protected_tail_v52.py'
+      - 'src/qfd/protected_tail_v53.py'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: protected-tail-v53-casmi2022-replay
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install project
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install pandas
+          PYTHONPATH=src pytest -q
+
+      - name: Download pinned candidate-table artifact from original v5.3 external replay
+        uses: actions/download-artifact@v4
+        with:
+          name: protected-tail-v53-casmi2022
+          path: /tmp/casmi2022-v53
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35669098238
+
+      - name: Verify pinned source artifact
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -f /tmp/casmi2022-v53/source/candidate_features.csv.gz
+          echo 'b605b87cab7c4259fbf1279c25e4ca16043b72273c04d7a0a564a7e1dd90e718  /tmp/casmi2022-v53/source/candidate_features.csv.gz' | sha256sum -c -
+          mkdir -p results/protected_tail_v53/casmi2022_replay
+
+      - name: Prove historical v5.1 scientific semantic identity
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src python scripts/verify_casmi2022_v51_semantic_identity.py \
+            /tmp/casmi2022-v53/source/candidate_features.csv.gz \
+            --out results/protected_tail_v53/casmi2022_replay/v51_semantic_identity.json \
+            --overlap-threshold 0.8 \
+            --protected-k 1 \
+            --overlap-k 10
+
+      - name: Replay frozen v5.3 with current implementation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src python scripts/analyze_protected_tail_v53.py \
+            /tmp/casmi2022-v53/source/candidate_features.csv.gz \
+            --out results/protected_tail_v53/casmi2022_replay/protected_tail_v53.json \
+            --overlap-threshold 0.8 \
+            --protected-k 1 \
+            --overlap-k 10 \
+            --head-survival-slack 1 \
+            --rr-cutoff 25 \
+            --role selector_external_validation_nonpristine_expert \
+            --guardrail 'CASMI2022 is external to the exact v5.3 selector but is not a pristine end-to-end lockbox for the underlying expert, which had prior exposure. No CASMI2022 outcome was used to retune v5.3.'
+
+      - name: Assert frozen CASMI2022 v5.3 result and controls
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import math
+          from pathlib import Path
+
+          p = Path('results/protected_tail_v53/casmi2022_replay/protected_tail_v53.json')
+          r = json.loads(p.read_text())
+
+          expected = {
+              ('source', 'queries'): 169,
+              ('source', 'candidates'): 1023662,
+              ('static', 'mrr25'): 0.059153276739569056,
+              ('static', 'top1'): 0.017422748191978962,
+              ('static', 'top5'): 0.09680119354675568,
+              ('static', 'top25'): 0.2744145228677559,
+              ('v53', 'mrr25'): 0.060112697941343364,
+              ('v53', 'top1'): 0.017422748191978962,
+              ('v53', 'top5'): 0.0974587381222871,
+              ('v53', 'top25'): 0.2803317409028376,
+              ('v53_vs_static', 'delta_mrr25'): 0.0009594212017743159,
+              ('v53_vs_static', 'delta_top1'): 0.0,
+              ('v53_vs_static', 'delta_top5'): 0.0006575445755312219,
+              ('v53_vs_static', 'delta_top25'): 0.005917218035081718,
+              ('v53_vs_static', 'wins'): 8,
+              ('v53_vs_static', 'losses'): 1,
+              ('v53_vs_static', 'ties'): 160,
+              ('usage', 'eligible_queries'): 22,
+              ('usage', 'permuted_control_eligible_queries'): 0,
+              ('invariants', 'v53_candidatewise_protected_topk_violations'): 0,
+          }
+          for path, want in expected.items():
+              got = r
+              for key in path:
+                  got = got[key]
+              if isinstance(want, float):
+                  if not math.isclose(float(got), want, rel_tol=0.0, abs_tol=2e-15):
+                      raise SystemExit(f'mismatch at {path}: {got!r} != {want!r}')
+              elif got != want:
+                  raise SystemExit(f'mismatch at {path}: {got!r} != {want!r}')
+
+          if r['invariants']['top1_exactly_invariant'] is not True:
+              raise SystemExit('Top-1 invariant failed')
+          pc = r['permuted_control_vs_static']
+          if not all(float(pc[k]) == 0.0 for k in ('delta_mrr25', 'delta_top1', 'delta_top5', 'delta_top25')):
+              raise SystemExit(f'permuted expert control changed metrics: {pc}')
+          if (pc['wins'], pc['losses'], pc['ties']) != (0, 0, 169):
+              raise SystemExit(f'permuted expert control query counts changed: {pc}')
+          print('CASMI2022 frozen v5.3 result and negative control reproduced exactly.')
+          PY
+
+      - name: Record replay provenance
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          out = Path('results/protected_tail_v53/casmi2022_replay/replay_provenance.json')
+          out.write_text(json.dumps({
+              'source_workflow_run_id': 35669098238,
+              'source_artifact_name': 'protected-tail-v53-casmi2022',
+              'source_raw_gzip_sha256': 'b605b87cab7c4259fbf1279c25e4ca16043b72273c04d7a0a564a7e1dd90e718',
+              'source_decompressed_csv_sha256': '3820e8e29c170e6a441a52c66a3851c32c316346bb543f3407b8a8d155aac4fd',
+              'historical_v51_raw_gzip_sha256': 'ae786e96c7099a07c6a80c50e51bc8148712161e3a7b6bd620bf5734b285c7db',
+              'historical_raw_byte_identity_established': False,
+              'historical_v51_scientific_semantic_identity_established': True,
+              'replay_git_sha': os.environ.get('GITHUB_SHA'),
+              'interpretation': 'Byte-level identity with the unavailable historical v5.1 candidate table is not claimed. Complete recorded v5.1 scientific audit statistics are reproduced exactly from the pinned v5.3 table, establishing semantic identity for that experiment.',
+          }, indent=2) + '\n')
+          PY
+
+      - name: Upload compact replay audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: protected-tail-v53-casmi2022-replay
+          path: results/protected_tail_v53/casmi2022_replay/
+          if-no-files-found: error
+          retention-days: 90
