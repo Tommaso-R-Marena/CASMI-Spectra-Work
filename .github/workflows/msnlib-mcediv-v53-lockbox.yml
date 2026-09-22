@@ -1,0 +1,162 @@
+name: msnlib-mcediv-v53-lockbox
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v53-msnlib-mcediv-lockbox]
+    paths:
+      - '.github/workflows/msnlib-mcediv-v53-lockbox.yml'
+      - 'docs/MSNLIB_MCEDIV_V53_LOCKBOX_PROTOCOL.md'
+      - 'scripts/audit_msnlib_unseen_collection.py'
+
+permissions:
+  contents: read
+
+jobs:
+  lockbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install frozen code and run tests
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install pandas
+          PYTHONPATH=src pytest -q
+
+      - name: Download pinned OTAVAPEP prior-development exclusion set
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 --retry-delay 2 \
+            'https://zenodo.org/records/21105617/files/20241003_otavapep_pos_ms2.json?download=1' -o /tmp/prior_otavapep.jsonl
+          echo '748de9d811589b318fc0e248d5c56201  /tmp/prior_otavapep.jsonl' | md5sum -c -
+
+      - name: Download pinned MCEDIV lockbox
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 --retry-delay 2 \
+            'https://zenodo.org/records/21105617/files/20250828_mcediv_50k_sub_pos_ms2.json?download=1' -o /tmp/target.jsonl
+          echo 'c4b7a8e4348b6c4181fc51167cf453a3  /tmp/target.jsonl' | md5sum -c -
+
+      - name: Label-free feasibility audit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p results/unseen_v53/mcediv
+          PYTHONPATH=src python scripts/audit_msnlib_unseen_collection.py \
+            /tmp/target.jsonl --exclude-jsonl /tmp/prior_otavapep.jsonl \
+            --out results/unseen_v53/mcediv/feasibility.json \
+            --exclude-list-out results/unseen_v53/mcediv/prior_full_inchikeys.txt \
+            --collection MCEDIV_50k_Sub
+
+      - name: Enforce predeclared gate before ranking
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('results/unseen_v53/mcediv/feasibility.json').read_text())
+          print(json.dumps(d['coverage'], indent=2))
+          if not d['gate_passed']:
+              raise SystemExit('PREDECLARED FEASIBILITY GATE FAILED. MCEDIV ranking remains unopened.')
+          print('PREDECLARED FEASIBILITY GATE PASSED. Opening frozen MCEDIV ranking.')
+          PY
+
+      - name: Export exact-condition scores with frozen expert
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src python scripts/export_msnlib_exact_condition_candidates.py \
+            /tmp/target.jsonl \
+            --out results/unseen_v53/mcediv/candidate_features_all.csv.gz \
+            --summary results/unseen_v53/mcediv/candidate_export_summary.json \
+            --validation-fraction 0.5
+
+      - name: Enforce OTAVAPEP disjointness and audited cohort identity
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          root=Path('results/unseen_v53/mcediv')
+          prior={x.strip() for x in (root/'prior_full_inchikeys.txt').read_text().splitlines() if x.strip()}
+          df=pd.read_csv(root/'candidate_features_all.csv.gz')
+          df=df.loc[~df['candidate_id'].isin(prior) & ~df['truth_id'].isin(prior)].copy()
+          groups=[]
+          for _,g in df.groupby('spec_id',sort=False):
+              if len(g)>=2 and int(g['is_truth'].astype(bool).sum())==1: groups.append(g)
+          if not groups: raise SystemExit('no disjoint eligible queries after overlap removal')
+          out=pd.concat(groups,ignore_index=True)
+          audit=json.loads((root/'feasibility.json').read_text())
+          nq=int(out['spec_id'].nunique()); nf=int(out['formula'].nunique())
+          if nq!=int(audit['coverage']['eligible_ambiguous_queries']):
+              raise SystemExit(f'audited/ranked query mismatch: {nq} vs {audit["coverage"]["eligible_ambiguous_queries"]}')
+          if nf!=int(audit['coverage']['eligible_formula_blocks']):
+              raise SystemExit(f'audited/ranked formula mismatch: {nf} vs {audit["coverage"]["eligible_formula_blocks"]}')
+          out.to_csv(root/'candidate_features_disjoint.csv.gz',index=False,compression='gzip')
+          print({'queries':nq,'formula_blocks':nf,'candidate_rows':len(out)})
+          PY
+
+      - name: Apply frozen protected-tail v5.3
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src python scripts/analyze_protected_tail_v53.py \
+            results/unseen_v53/mcediv/candidate_features_disjoint.csv.gz \
+            --out results/unseen_v53/mcediv/protected_tail_v53.json \
+            --overlap-threshold 0.8 --protected-k 1 --overlap-k 10 \
+            --head-survival-slack 1 --rr-cutoff 25 \
+            --role prospective_structure_disjoint_cross_collection_lockbox \
+            --guardrail 'Frozen v5.3; feasibility-gated before ranking; all full-InChIKey overlap with OTAVAPEP removed; no MCEDIV outcome may be used for retuning.'
+
+      - name: Formula-block inference and predeclared verdict
+        shell: bash
+        run: |
+          PYTHONPATH=src python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          from qfd.stats import paired_block_bootstrap_delta, paired_block_signflip_test
+          root=Path('results/unseen_v53/mcediv')
+          df=pd.read_csv(root/'candidate_features_disjoint.csv.gz')
+          r=json.loads((root/'protected_tail_v53.json').read_text())
+          fmap=df[['spec_id','formula']].drop_duplicates().set_index('spec_id')['formula'].to_dict()
+          q=r['query_diagnostics']; blocks=[fmap[str(x['spec_id'])] for x in q]
+          v=[float(x['rr_v53']) for x in q]; s=[float(x['rr_static']) for x in q]; p=[float(x['rr_permuted_control']) for x in q]
+          pci=paired_block_bootstrap_delta(v,s,blocks,n_boot=20000,seed=20260922)
+          ptest=paired_block_signflip_test(v,s,blocks,seed=20260922,n_permutations=200000)
+          cci=paired_block_bootstrap_delta(p,s,blocks,n_boot=20000,seed=20260923)
+          ctest=paired_block_signflip_test(p,s,blocks,seed=20260923,n_permutations=200000)
+          safe=bool(r['invariants']['top1_exactly_invariant'] and r['invariants']['v53_candidatewise_protected_topk_violations']==0)
+          strong=bool(safe and pci['delta']>0 and pci['ci_low']>0 and ptest['p_value_two_sided']<0.05 and cci['ci_low']<=0)
+          out={'collection':'MCEDIV_50k_Sub','evaluation_role':'prospective_structure_disjoint_cross_collection_lockbox','primary_delta_mrr25_formula_block_bootstrap':pci,'primary_formula_block_signflip':ptest,'permuted_control_delta_mrr25_formula_block_bootstrap':cci,'permuted_control_formula_block_signflip':ctest,'safety_endpoint_passed':safe,'predeclared_strong_positive_replication':strong,'selector_metrics':r['v53_vs_static'],'selector_usage':r['usage']}
+          (root/'inference_and_verdict.json').write_text(json.dumps(out,indent=2)+'\n')
+          print(json.dumps(out,indent=2))
+          PY
+
+      - name: Record provenance
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path('results/unseen_v53/mcediv'); root.mkdir(parents=True,exist_ok=True)
+          (root/'provenance.json').write_text(json.dumps({'collection':'MCEDIV_50k_Sub','filename':'20250828_mcediv_50k_sub_pos_ms2.json','zenodo_record':'21105617','expected_md5':'c4b7a8e4348b6c4181fc51167cf453a3','prior_exclusion_collection':'OTAVAPEP positive MS2','frozen_selector_parent_sha':'0006c7f81c7dfac53da48690ca0fe627108b9767','workflow_sha':os.environ.get('GITHUB_SHA'),'ranking_opened_only_after_gate':True},indent=2)+'\n')
+          PY
+
+      - name: Upload lockbox artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msnlib-unseen-v53-mcediv
+          path: results/unseen_v53/mcediv/
+          if-no-files-found: warn
+          retention-days: 90
