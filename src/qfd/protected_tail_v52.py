@@ -62,6 +62,39 @@ def static_protected_head_survives_expert(
     return survives, protected, head_size, max_rank
 
 
+def _protected_tail_guard(
+    static_scores: Iterable[float],
+    expert_scores: Iterable[float],
+    *,
+    overlap_threshold: float,
+    protected_k: int,
+    overlap_k: int,
+    head_survival_slack: int,
+) -> tuple[np.ndarray, np.ndarray, float, bool, np.ndarray, bool, int]:
+    """Compute the shared v5.2/v5.3 label-free guard exactly once.
+
+    ``use_tail`` means that both scientific guards pass *and* at least one
+    unprotected candidate exists. This final condition is not a new selector
+    parameter: when the tie-closed protected head covers the whole pool there
+    is literally no tail to rerank, so both versions must report ``used=False``.
+    """
+    static, expert = _aligned_finite_scores(static_scores, expert_scores)
+    overlap = tie_aware_topk_overlap_fraction(static, expert, k=overlap_k)
+    head_survives, protected, _, max_rank = static_protected_head_survives_expert(
+        static,
+        expert,
+        protected_k=protected_k,
+        slack=head_survival_slack,
+    )
+    has_tail = bool(np.any(~protected))
+    use_tail = bool(
+        overlap + 1e-12 >= float(overlap_threshold)
+        and head_survives
+        and has_tail
+    )
+    return static, expert, float(overlap), use_tail, protected, head_survives, max_rank
+
+
 def protected_tail_v52_scores(
     static_scores: Iterable[float],
     expert_scores: Iterable[float],
@@ -81,28 +114,26 @@ def protected_tail_v52_scores(
        ``head_size + head_survival_slack`` under the expert, measured with
        expert tie-block maximum ranks.
 
-    If either guard fails, the static scores are returned unchanged. If both
-    pass, the v5 protected-tail construction is used, so the protected static
-    prefix remains exactly above the expert-reranked tail. Consequently
-    ``protected_k=1`` retains the v5 theorem of exact tie-aware Top-1
-    invariance for every possible truth label.
+    If either guard fails, or if the tie-closed protected head already covers
+    the complete candidate pool, the static scores are returned unchanged. If
+    both guards pass and a non-empty tail exists, the v5 protected-tail
+    construction is used, so the protected static prefix remains exactly above
+    the expert-reranked tail. Consequently ``protected_k=1`` retains the v5
+    theorem of exact tie-aware Top-1 invariance for every possible truth label.
 
     Returns ``(scores, overlap, used_expert_tail, protected_mask,
     head_survives, max_protected_expert_rank)``.
     """
-    static, expert = _aligned_finite_scores(static_scores, expert_scores)
-    overlap = tie_aware_topk_overlap_fraction(static, expert, k=overlap_k)
-    head_survives, protected, _, max_rank = static_protected_head_survives_expert(
-        static,
-        expert,
+    static, expert, overlap, use_expert, protected, head_survives, max_rank = _protected_tail_guard(
+        static_scores,
+        expert_scores,
+        overlap_threshold=overlap_threshold,
         protected_k=protected_k,
-        slack=head_survival_slack,
+        overlap_k=overlap_k,
+        head_survival_slack=head_survival_slack,
     )
-    # The tiny tolerance only absorbs floating arithmetic at exact fractional
-    # overlap boundaries (for example, a mathematically exact 0.8).
-    use_expert = bool(overlap + 1e-12 >= float(overlap_threshold) and head_survives)
     if not use_expert:
-        return static.copy(), float(overlap), False, protected, head_survives, max_rank
+        return static.copy(), overlap, False, protected, head_survives, max_rank
 
     chosen, overlap_check, used, protected_check = protected_tail_consensus_scores(
         static,
@@ -115,4 +146,4 @@ def protected_tail_v52_scores(
         raise RuntimeError("v5.2/v5 protected-head construction mismatch")
     if not np.isclose(overlap, overlap_check, rtol=0.0, atol=1e-15):
         raise RuntimeError("v5.2/v5 overlap calculation mismatch")
-    return chosen, float(overlap), True, protected, True, max_rank
+    return chosen, overlap, True, protected, head_survives, max_rank
