@@ -4,11 +4,7 @@ from typing import Iterable
 
 import numpy as np
 
-from qfd.consensus_ranker import tie_aware_topk_overlap_fraction
-from qfd.protected_tail_v52 import (
-    _aligned_finite_scores,
-    static_protected_head_survives_expert,
-)
+from qfd.protected_tail_v52 import _protected_tail_guard
 
 
 def expected_descending_ranks(scores: Iterable[float]) -> np.ndarray:
@@ -52,10 +48,11 @@ def protected_tail_v53_scores(
     2. the full tie-closed static protected head must survive within
        ``head_size + head_survival_slack`` under the expert.
 
-    If either guard fails, static scores are returned unchanged. If both pass,
-    the tie-closed static top-``protected_k`` prefix remains strictly above the
-    tail. Tail candidates are then ranked by the *worse* of their tie-aware
-    expected static rank and expert rank:
+    If either guard fails, or if the protected head covers the whole pool,
+    static scores are returned unchanged. Otherwise the tie-closed static
+    top-``protected_k`` prefix remains strictly above the tail. Tail candidates
+    are ranked by the *worse* of their tie-aware expected static rank and
+    expert rank:
 
         consensus_cost_i = max(rank_static_i, rank_expert_i).
 
@@ -69,19 +66,18 @@ def protected_tail_v53_scores(
     Returns ``(scores, overlap, used_consensus_tail, protected_mask,
     head_survives, max_protected_expert_rank)``.
     """
-    static, expert = _aligned_finite_scores(static_scores, expert_scores)
-    overlap = tie_aware_topk_overlap_fraction(static, expert, k=overlap_k)
-    head_survives, protected, _, max_rank = static_protected_head_survives_expert(
-        static,
-        expert,
+    static, expert, overlap, use_tail, protected, head_survives, max_rank = _protected_tail_guard(
+        static_scores,
+        expert_scores,
+        overlap_threshold=overlap_threshold,
         protected_k=protected_k,
-        slack=head_survival_slack,
+        overlap_k=overlap_k,
+        head_survival_slack=head_survival_slack,
     )
-    eligible = bool(overlap + 1e-12 >= float(overlap_threshold) and head_survives)
-    tail = ~protected
-    if not eligible or not np.any(tail):
-        return static.copy(), float(overlap), False, protected, head_survives, max_rank
+    if not use_tail:
+        return static.copy(), overlap, False, protected, head_survives, max_rank
 
+    tail = ~protected
     static_rank = expected_descending_ranks(static[tail])
     expert_rank = expected_descending_ranks(expert[tail])
     consensus_cost = np.maximum(static_rank, expert_rank)
@@ -101,4 +97,4 @@ def protected_tail_v53_scores(
         members = tail_indices[consensus_cost == value]
         out[members] = -float(group_rank)
 
-    return out, float(overlap), True, protected, True, max_rank
+    return out, overlap, True, protected, head_survives, max_rank
