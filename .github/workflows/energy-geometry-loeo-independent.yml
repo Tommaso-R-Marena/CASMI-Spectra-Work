@@ -1,0 +1,145 @@
+name: energy-geometry-loeo-independent
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v53-independent-msnlib-lockboxes]
+    paths:
+      - '.github/workflows/energy-geometry-loeo-independent.yml'
+      - 'src/qfd/energy_geometry.py'
+      - 'src/qfd/energy_interpolation.py'
+      - 'scripts/audit_msnlib_energy_geometry_loeo.py'
+      - 'scripts/benchmark_msnlib_energy_geometry_loeo.py'
+      - 'docs/ENERGY_GEOMETRY_LOEO_PROTOCOL.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: energy-geometry-loeo-independent-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FROZEN_IMPL_SHA: 9a77ce8eee6820581fd1d05ffd42502bf55b25c2
+
+jobs:
+  loeo:
+    name: loeo-${{ matrix.dataset }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dataset: mcebio
+            file: 20241003_mcebio_pos_ms2.json
+            md5: 806f33c9c60af74a0aa21fb66aeb84f3
+          - dataset: mcediv_50k_sub
+            file: 20250828_mcediv_50k_sub_pos_ms2.json
+            md5: c4b7a8e4348b6c4181fc51167cf453a3
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify frozen generalized LOEO implementation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin "$FROZEN_IMPL_SHA"
+          git diff --exit-code "$FROZEN_IMPL_SHA" -- \
+            src/qfd/energy_geometry.py \
+            src/qfd/energy_interpolation.py \
+            scripts/audit_msnlib_energy_geometry_loeo.py \
+            scripts/benchmark_msnlib_energy_geometry_loeo.py \
+            docs/ENERGY_GEOMETRY_LOEO_PROTOCOL.md
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+
+      - name: Download and verify pinned MSnLib dataset
+        shell: bash
+        env:
+          DATASET_FILE: ${{ matrix.file }}
+          DATASET_MD5: ${{ matrix.md5 }}
+        run: |
+          set -euxo pipefail
+          mkdir -p "results/energy_geometry_loeo/${{ matrix.dataset }}"
+          curl -L --fail --retry 4 --retry-delay 3 \
+            "https://zenodo.org/records/21105617/files/${DATASET_FILE}?download=1" \
+            -o /tmp/msnlib.jsonl
+          echo "${DATASET_MD5}  /tmp/msnlib.jsonl" | md5sum -c -
+          sha256sum /tmp/msnlib.jsonl | tee "results/energy_geometry_loeo/${{ matrix.dataset }}/input_sha256.txt"
+
+      - name: Run label-free feasibility audit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_msnlib_energy_geometry_loeo.py \
+            /tmp/msnlib.jsonl \
+            --dataset "${{ matrix.dataset }}" \
+            --out "results/energy_geometry_loeo/${{ matrix.dataset }}/feasibility.json"
+
+      - name: Enforce frozen feasibility gate before scoring
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('results/energy_geometry_loeo/${{ matrix.dataset }}/feasibility.json')
+          d = json.loads(p.read_text())
+          print(json.dumps({'coverage': d['coverage'], 'predeclared_gate': d['predeclared_gate'], 'gate_pass': d['gate_pass']}, indent=2))
+          if not d['gate_pass']:
+              raise SystemExit('FROZEN GENERALIZED LOEO FEASIBILITY GATE FAILED. Prediction scores remain unopened.')
+          print('FROZEN GENERALIZED LOEO FEASIBILITY GATE PASSED. Prediction scores may now be opened.')
+          PY
+
+      - name: Open frozen generalized LOEO prediction outcomes
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/benchmark_msnlib_energy_geometry_loeo.py \
+            /tmp/msnlib.jsonl \
+            --dataset "${{ matrix.dataset }}" \
+            --seed 20260922 \
+            --out "results/energy_geometry_loeo/${{ matrix.dataset }}/result.json"
+
+      - name: Record immutable provenance
+        if: always()
+        shell: bash
+        env:
+          DATASET_FILE: ${{ matrix.file }}
+          DATASET_MD5: ${{ matrix.md5 }}
+        run: |
+          mkdir -p "results/energy_geometry_loeo/${{ matrix.dataset }}"
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path('results/energy_geometry_loeo/${{ matrix.dataset }}')
+          inp = Path('/tmp/msnlib.jsonl')
+          p = {
+              'dataset': '${{ matrix.dataset }}',
+              'zenodo_record': '21105617',
+              'filename': os.environ['DATASET_FILE'],
+              'expected_md5': os.environ['DATASET_MD5'],
+              'input_sha256': hashlib.sha256(inp.read_bytes()).hexdigest() if inp.exists() else None,
+              'frozen_impl_sha': os.environ['FROZEN_IMPL_SHA'],
+              'workflow_git_sha': os.environ.get('GITHUB_SHA'),
+              'protocol_file': 'docs/ENERGY_GEOMETRY_LOEO_PROTOCOL.md',
+              'no_retuning_after_outcomes': True,
+          }
+          (root / 'provenance.json').write_text(json.dumps(p, indent=2) + '\n')
+          PY
+
+      - name: Upload LOEO artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: energy-geometry-loeo-${{ matrix.dataset }}
+          path: results/energy_geometry_loeo/${{ matrix.dataset }}/
+          if-no-files-found: warn
+          retention-days: 90
