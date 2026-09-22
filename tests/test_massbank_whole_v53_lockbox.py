@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import sys
+import types
 from pathlib import Path
 
+import numpy as np
+
+# The one-shot CLI uses pandas only inside its ranking path. Base repo CI does not
+# install pandas, so provide an inert import stub while testing the pure parser and
+# invariant helpers. The lockbox workflow installs real pandas before execution.
+sys.modules.setdefault("pandas", types.ModuleType("pandas"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from run_massbank_whole_v53_lockbox import _parse_massbank_spectrum, _top1_vector
-
-import numpy as np
 
 
 def test_massbank_spectrum_parser_freezes_absolute_intensity_column(tmp_path: Path) -> None:
