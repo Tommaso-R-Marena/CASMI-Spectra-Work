@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
-from scripts.audit_massbank_mui_lockbox import build_audit
+# CI runs with PYTHONPATH=src, so import the standalone audit script explicitly.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from audit_massbank_mui_lockbox import build_audit
 
 
 def _record(
