@@ -3,7 +3,7 @@ name: protected-tail-v53-msnlib-validation
 on:
   workflow_dispatch:
   push:
-    branches: [protected-tail-minimax-v53]
+    branches: [protected-tail-minimax-v53, v53-msnlib-decisive-validation]
     paths:
       - '.github/workflows/protected-tail-v53-msnlib-validation.yml'
       - 'scripts/export_msnlib_exact_condition_candidates.py'
@@ -119,6 +119,7 @@ jobs:
               'expert': 'joint_mean exact-condition trajectory score',
               'baseline': 'static_best exact-condition score',
               'rule_version': 'protected-tail-v5.3-minimax-tail',
+              'frozen_selector_parent_sha': '0006c7f81c7dfac53da48690ca0fe627108b9767',
               'git_sha': os.environ.get('GITHUB_SHA'),
               'frozen_parameters': {
                   'overlap_threshold': 0.8,
