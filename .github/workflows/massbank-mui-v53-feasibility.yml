@@ -1,0 +1,136 @@
+name: massbank-mui-v53-feasibility
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v53-massbank-mui-lockbox]
+    paths:
+      - '.github/workflows/massbank-mui-v53-feasibility.yml'
+      - 'scripts/audit_massbank_mui_lockbox.py'
+      - 'tests/test_massbank_mui_lockbox.py'
+      - 'docs/MASSBANK_MUI_V53_LOCKBOX_PROTOCOL.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: massbank-mui-v53-feasibility
+  cancel-in-progress: false
+
+jobs:
+  feasibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      MASSBANK_SHA: befc8a1e2f2aef899747797c081a5d80fab12fe7
+      BASELINE_TAG: '2026.03'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install and test frozen code plus lockbox audit
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+
+      - name: Fetch exact MassBank MUI snapshot sparsely
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf /tmp/massbank
+          git clone --filter=blob:none --no-checkout https://github.com/MassBank/MassBank-data.git /tmp/massbank
+          cd /tmp/massbank
+          git sparse-checkout init --cone
+          git sparse-checkout set MUI
+          git fetch --depth=1 origin "$MASSBANK_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$MASSBANK_SHA"
+          test -d MUI
+          find MUI -type f -name '*.txt' | wc -l
+
+      - name: Assert MUI is absent from historical 2026.03 tag
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd /tmp/massbank
+          git fetch --depth=1 origin "refs/tags/${BASELINE_TAG}:refs/tags/${BASELINE_TAG}"
+          if git ls-tree --name-only "refs/tags/${BASELINE_TAG}" MUI | grep -q .; then
+            echo "MUI unexpectedly exists in historical baseline tag ${BASELINE_TAG}" >&2
+            exit 1
+          fi
+          echo "Confirmed: MUI absent from historical baseline tag ${BASELINE_TAG}"
+
+      - name: Run label-free feasibility audit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p results/massbank_mui_v53
+          PYTHONPATH=src:. python scripts/audit_massbank_mui_lockbox.py \
+            /tmp/massbank/MUI \
+            --dataset-commit "$MASSBANK_SHA" \
+            --baseline-tag "$BASELINE_TAG" \
+            --out-json results/massbank_mui_v53/feasibility.json \
+            --out-manifest results/massbank_mui_v53/feasibility_manifest.csv
+
+      - name: Enforce predeclared feasibility gate without ranking
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('results/massbank_mui_v53/feasibility.json')
+          d = json.loads(p.read_text())
+          assert d['predeclared_design']['no_ranking_scores_computed'] is True
+          q = int(d['coverage']['eligible_ambiguous_queries'])
+          f = int(d['coverage']['eligible_formula_groups'])
+          print(json.dumps({
+              'eligible_ambiguous_queries': q,
+              'eligible_formula_groups': f,
+              'pool_size': d['coverage']['pool_size'],
+              'queries_by_min_pool_size': d['coverage']['queries_by_min_pool_size'],
+              'formula_groups_by_min_pool_size': d['coverage']['formula_groups_by_min_pool_size'],
+              'feasibility_gate_queries_ge_30': q >= 30,
+              'feasibility_gate_formula_blocks_ge_10': f >= 10,
+          }, indent=2))
+          if q < 30 or f < 10:
+              raise SystemExit(
+                  f'PREDECLARED FEASIBILITY GATE FAILED: queries={q} (need >=30), formulas={f} (need >=10). '
+                  'Do not run ranking on this dataset under this protocol.'
+              )
+          print('PREDECLARED FEASIBILITY GATE PASSED; ranking remains unopened.')
+          PY
+
+      - name: Record repository provenance
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results/massbank_mui_v53
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path('results/massbank_mui_v53/provenance.json').write_text(json.dumps({
+              'user_repo_sha': os.environ.get('GITHUB_SHA'),
+              'frozen_v53_parent_sha': '0006c7f81c7dfac53da48690ca0fe627108b9767',
+              'massbank_sha': os.environ['MASSBANK_SHA'],
+              'historical_baseline_tag': os.environ['BASELINE_TAG'],
+              'ranking_opened': False,
+              'role': 'label_free_feasibility_only',
+          }, indent=2) + '\n')
+          PY
+
+      - name: Upload feasibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: massbank-mui-v53-feasibility
+          path: |
+            results/massbank_mui_v53/feasibility.json
+            results/massbank_mui_v53/feasibility_manifest.csv
+            results/massbank_mui_v53/provenance.json
+          if-no-files-found: warn
+          retention-days: 90
