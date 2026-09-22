@@ -87,7 +87,8 @@ jobs:
             --overlap-k 10 \
             --head-survival-slack 1 \
             --rr-cutoff 25 \
-            --role formula_heldout_selector_external_validation
+            --role formula_heldout_selector_external_validation \
+            --guardrail 'Formula-heldout internal validation external to the exact v5.3 selector; this is not an independent external library and no MSnLib outcome was used to retune the selector.'
 
       - name: Apply frozen v5.3 on all eligible MSnLib queries as sensitivity analysis
         shell: bash
@@ -101,7 +102,8 @@ jobs:
             --overlap-k 10 \
             --head-survival-slack 1 \
             --rr-cutoff 25 \
-            --role all_query_sensitivity_analysis
+            --role all_query_sensitivity_analysis \
+            --guardrail 'Sensitivity analysis over all eligible MSnLib queries; this is not an independent external library and no MSnLib outcome was used to retune the selector.'
 
       - name: Record provenance
         shell: bash
