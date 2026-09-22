@@ -1,0 +1,164 @@
+name: massbank-whole-v53-lockbox
+
+on:
+  push:
+    branches: [v53-massbank-postrelease-lockbox]
+    paths:
+      - '.github/workflows/massbank-whole-v53-lockbox.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MASSBANK_SHA: befc8a1e2f2aef899747797c081a5d80fab12fe7
+  EXPECTED_MANIFEST_SHA256: 6c50c713d30a6d942173c2cd686baa5f1b5746dece7e50310bc0b5bf2ad00481
+  EXPECTED_FROZEN_MODEL_SHA256: 5f5649d8e771babfbb817e780873d1b691b714ecc814c11cae46a9a5e2a871eb
+
+jobs:
+  lockbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies and run all tests
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]' pandas
+          PYTHONPATH=src:. pytest -q
+          python -m py_compile scripts/run_massbank_whole_v53_lockbox.py
+
+      - name: Verify frozen expert identity
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "$EXPECTED_FROZEN_MODEL_SHA256  benchmark_results/casmi_consensus_frozen_model.json" | sha256sum -c -
+
+      - name: Materialize exact pinned MassBank snapshot
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf /tmp/massbank
+          git clone --filter=blob:none --no-checkout https://github.com/MassBank/MassBank-data.git /tmp/massbank
+          cd /tmp/massbank
+          git fetch --depth=1 origin "$MASSBANK_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$MASSBANK_SHA"
+
+      - name: Recreate unopened feasibility manifest and assert exact identity
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p results/massbank_whole_v53_lockbox
+          PYTHONPATH=src:scripts:. python scripts/audit_massbank_external_lockbox.py \
+            /tmp/massbank \
+            --dataset-sha "$MASSBANK_SHA" \
+            --out-json results/massbank_whole_v53_lockbox/feasibility_replay.json \
+            --out-manifest results/massbank_whole_v53_lockbox/feasibility_manifest.csv
+          echo "$EXPECTED_MANIFEST_SHA256  results/massbank_whole_v53_lockbox/feasibility_manifest.csv" | sha256sum -c -
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d = json.loads(Path('results/massbank_whole_v53_lockbox/feasibility_replay.json').read_text())
+          c = d['coverage']
+          assert d['design']['ranking_scores_computed'] is False
+          assert int(c['queries']) == 765
+          assert int(c['formula_blocks']) == 355
+          assert int(c['queries_by_min_pool_size']['ge_5']) == 114
+          assert int(c['contributors']) == 18
+          print('Exact feasibility replay passed; performance lockbox may now be opened.')
+          PY
+
+      - name: Open one-shot frozen v5.3 performance lockbox
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:scripts:. python scripts/run_massbank_whole_v53_lockbox.py \
+            /tmp/massbank \
+            results/massbank_whole_v53_lockbox/feasibility_manifest.csv \
+            benchmark_results/casmi_consensus_frozen_model.json \
+            --expected-manifest-sha256 "$EXPECTED_MANIFEST_SHA256" \
+            --dataset-sha "$MASSBANK_SHA" \
+            --out-dir results/massbank_whole_v53_lockbox
+
+      - name: Show compact locked result
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('results/massbank_whole_v53_lockbox/summary.json')
+          if not p.exists():
+              print('summary.json not produced')
+              raise SystemExit(0)
+          d = json.loads(p.read_text())
+          out = {
+              'dataset': d['dataset'],
+              'static': d['summaries']['static'],
+              'v53': d['summaries']['v53'],
+              'primary': d['primary_v53_vs_static'],
+              'controls': d['negative_controls_vs_static'],
+              'control_contrasts': d['v53_vs_negative_controls'],
+              'pool_ge_5': d['robustness']['pool_ge_5'],
+              'usage': {
+                  'used_queries': d['robustness']['used_v53_queries'],
+                  'fraction': d['robustness']['used_v53_fraction'],
+              },
+              'invariants': d['invariants'],
+              'success_gate': d['predeclared_success_gate'],
+          }
+          print(json.dumps(out, indent=2))
+          PY
+
+      - name: Record lockbox provenance
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results/massbank_whole_v53_lockbox
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path('results/massbank_whole_v53_lockbox/provenance.json').write_text(json.dumps({
+              'user_repo_sha': os.environ.get('GITHUB_SHA'),
+              'frozen_v53_parent_sha': '0006c7f81c7dfac53da48690ca0fe627108b9767',
+              'massbank_sha': os.environ['MASSBANK_SHA'],
+              'feasibility_manifest_sha256': os.environ['EXPECTED_MANIFEST_SHA256'],
+              'frozen_model_sha256': os.environ['EXPECTED_FROZEN_MODEL_SHA256'],
+              'ranking_opened': True,
+              'role': 'prospectively_predeclared_external_performance_lockbox',
+              'no_massbank_outcome_driven_parameter_changes_before_opening': True,
+          }, indent=2) + '\n')
+          PY
+
+      - name: Upload immutable lockbox evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: massbank-whole-v53-lockbox
+          path: results/massbank_whole_v53_lockbox/
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Enforce predeclared scientific success gate
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('results/massbank_whole_v53_lockbox/summary.json')
+          if not p.exists():
+              raise SystemExit('LOCKBOX IMPLEMENTATION FAILED BEFORE SUMMARY; no scientific conclusion')
+          d = json.loads(p.read_text())
+          g = d['predeclared_success_gate']
+          print(json.dumps(g, indent=2))
+          if not bool(g['PASS']):
+              raise SystemExit('PREDECLARED SCIENTIFIC SUCCESS GATE FAILED; preserve result and do not retune this lockbox')
+          print('PREDECLARED SCIENTIFIC SUCCESS GATE PASSED')
+          PY
