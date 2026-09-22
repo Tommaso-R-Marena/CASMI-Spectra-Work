@@ -1,0 +1,114 @@
+name: massbank-whole-v53-feasibility
+
+on:
+  push:
+    branches: [v53-massbank-postrelease-lockbox]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MASSBANK_SHA: befc8a1e2f2aef899747797c081a5d80fab12fe7
+
+jobs:
+  feasibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install and test frozen repository
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+
+      - name: Materialize pinned MassBank snapshot
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf /tmp/massbank
+          git clone --filter=blob:none --no-checkout https://github.com/MassBank/MassBank-data.git /tmp/massbank
+          cd /tmp/massbank
+          git fetch --depth=1 origin "$MASSBANK_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$MASSBANK_SHA"
+
+      - name: Run label-free whole-library feasibility audit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p results/massbank_whole_v53
+          PYTHONPATH=src:scripts:. python scripts/audit_massbank_external_lockbox.py \
+            /tmp/massbank \
+            --dataset-sha "$MASSBANK_SHA" \
+            --out-json results/massbank_whole_v53/feasibility.json \
+            --out-manifest results/massbank_whole_v53/feasibility_manifest.csv
+
+      - name: Enforce predeclared serious-result feasibility gate without ranking
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d = json.loads(Path('results/massbank_whole_v53/feasibility.json').read_text())
+          assert d['design']['ranking_scores_computed'] is False
+          assert d['design']['performance_unopened'] is True
+          assert d['guardrails']['label_free'] is True
+          c = d['coverage']
+          gate = {
+              'queries_ge_200': int(c['queries']) >= 200,
+              'formula_blocks_ge_100': int(c['formula_blocks']) >= 100,
+              'queries_pool_ge_5_ge_50': int(c['queries_by_min_pool_size']['ge_5']) >= 50,
+              'contributors_ge_3': int(c['contributors']) >= 3,
+          }
+          report = {
+              'ranking_opened': False,
+              'predeclared_gate': gate,
+              'coverage': c,
+              'rule': 'all four feasibility conditions must pass before any score or rank is computed',
+              'future_primary_inference': 'formula-block clustered',
+          }
+          Path('results/massbank_whole_v53/feasibility_gate.json').write_text(json.dumps(report, indent=2) + '\n')
+          print(json.dumps(report, indent=2))
+          if not all(gate.values()):
+              raise SystemExit('PREDECLARED WHOLE-MASSBANK FEASIBILITY GATE FAILED. Do not open rankings.')
+          print('PREDECLARED WHOLE-MASSBANK FEASIBILITY GATE PASSED; rankings remain unopened.')
+          PY
+
+      - name: Record provenance
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results/massbank_whole_v53
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path('results/massbank_whole_v53/provenance.json').write_text(json.dumps({
+              'user_repo_sha': os.environ.get('GITHUB_SHA'),
+              'frozen_v53_parent_sha': '0006c7f81c7dfac53da48690ca0fe627108b9767',
+              'massbank_sha': os.environ['MASSBANK_SHA'],
+              'ranking_opened': False,
+              'role': 'prospectively_predeclared_whole_massbank_external_feasibility',
+              'gate': {
+                  'queries': 200,
+                  'formula_blocks': 100,
+                  'queries_with_pool_ge_5': 50,
+                  'contributors': 3,
+              },
+          }, indent=2) + '\n')
+          PY
+
+      - name: Upload feasibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: massbank-whole-v53-feasibility
+          path: results/massbank_whole_v53/
+          if-no-files-found: warn
+          retention-days: 90
