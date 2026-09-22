@@ -92,6 +92,13 @@ def main() -> None:
     p.add_argument("--head-survival-slack", type=int, default=1)
     p.add_argument("--rr-cutoff", type=int, default=25)
     p.add_argument("--control-seed", type=int, default=20260921)
+    p.add_argument(
+        "--guardrail",
+        default=(
+            "Selection parameters were frozen before this replay. Interpret this result according to "
+            "the dataset-specific provenance recorded by the calling workflow."
+        ),
+    )
     args = p.parse_args()
 
     df = pd.read_csv(args.candidate_features)
@@ -231,10 +238,7 @@ def main() -> None:
             "mean_protected_count": float(np.mean([int(r["protected_count"]) for r in query_rows])),
         },
         "query_diagnostics": query_rows,
-        "guardrail": (
-            "Selection parameters were frozen before this replay. CASMI2022 is external to the exact v5.3 selector "
-            "but is not a pristine end-to-end lockbox for the underlying expert, which had prior exposure."
-        ),
+        "guardrail": str(args.guardrail),
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2) + "\n")
