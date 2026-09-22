@@ -51,7 +51,8 @@ A library is scored only if the label-free audit finds all of:
 
 - at least 1,000 held-out query triplets;
 - at least 500 distinct full-InChIKey + adduct structures;
-- at least 300 molecular-formula blocks.
+- at least 300 molecular-formula blocks;
+- at least 500 **off-center** query triplets with `|t-0.5|>1e-12`, so energy-aware interpolation can actually differ from the 50/50 and reversed-energy controls.
 
 A failed gate remains unopened and is reported as a feasibility result.
 
@@ -59,22 +60,24 @@ A failed gate remains unopened and is reported as a feasibility result.
 
 Primary sampling/resampling unit: molecular-formula block. The estimand is the query-weighted mean paired change in Bhattacharyya affinity. Report 10,000-draw formula-block bootstrap 95% intervals and a two-sided formula-block sign-flip/randomization test (200,000 Monte Carlo assignments when exact enumeration is infeasible).
 
+For comparisons involving the 50/50 or reversed-energy controls, the **off-center cohort** is the primary specificity cohort because at exactly `t=0.5` the linear, equal-mix, and reversed predictors are algebraically identical. Full-cohort values are reported descriptively as well.
+
 ### Claim L — energy-aware linear interpolation
 
 Confirmatory support requires **all three** predeclared comparisons to have positive mean delta, bootstrap 95% lower endpoint >0, and two-sided block-randomization p<0.05:
 
-- linear mixture minus best endpoint;
-- linear mixture minus 50/50 energy-blind mixture;
-- linear mixture minus reversed-energy mixture.
+- linear mixture minus best endpoint on the full eligible cohort;
+- linear mixture minus 50/50 energy-blind mixture on the off-center cohort;
+- linear mixture minus reversed-energy mixture on the off-center cohort.
 
 ### Claim G — Fisher-Rao/Hellinger geometry
 
 Evidence that the information-geometric path improves on ordinary interpolation requires the same three-part statistical criterion for:
 
-- Hellinger geodesic minus best endpoint;
-- Hellinger geodesic minus 50/50 mixture;
-- Hellinger geodesic minus reversed-energy mixture;
-- and, specifically for superiority over ordinary interpolation, Hellinger geodesic minus linear mixture.
+- Hellinger geodesic minus best endpoint on the full eligible cohort;
+- Hellinger geodesic minus 50/50 mixture on the off-center cohort;
+- Hellinger geodesic minus reversed-energy mixture on the off-center cohort;
+- and, specifically for superiority over ordinary interpolation, Hellinger geodesic minus linear mixture on the full eligible cohort.
 
 Claim G is not rescued by Claim L; the comparisons remain separate.
 
