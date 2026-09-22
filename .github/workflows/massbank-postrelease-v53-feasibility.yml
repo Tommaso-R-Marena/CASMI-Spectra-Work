@@ -1,0 +1,140 @@
+name: massbank-postrelease-v53-feasibility
+
+on:
+  push:
+    branches: [v53-massbank-postrelease-lockbox]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MASSBANK_BASELINE_SHA: 705afb7bccc3b2c42410a744eef73674716a60ef
+  MASSBANK_CURRENT_SHA: befc8a1e2f2aef899747797c081a5d80fab12fe7
+
+jobs:
+  feasibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install and test frozen repository
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+
+      - name: Materialize exact MassBank baseline and current trees
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf /tmp/massbank-git /tmp/massbank-current /tmp/massbank-baseline
+          git clone --filter=blob:none --no-checkout https://github.com/MassBank/MassBank-data.git /tmp/massbank-git
+          cd /tmp/massbank-git
+          git fetch --depth=1 origin "$MASSBANK_CURRENT_SHA"
+          git fetch --depth=1 origin "refs/tags/2026.03:refs/tags/2026.03"
+          test "$(git rev-parse refs/tags/2026.03)" = "$MASSBANK_BASELINE_SHA"
+          git worktree add --detach /tmp/massbank-current "$MASSBANK_CURRENT_SHA"
+          git worktree add --detach /tmp/massbank-baseline "$MASSBANK_BASELINE_SHA"
+          test "$(git -C /tmp/massbank-current rev-parse HEAD)" = "$MASSBANK_CURRENT_SHA"
+          test "$(git -C /tmp/massbank-baseline rev-parse HEAD)" = "$MASSBANK_BASELINE_SHA"
+
+      - name: Freeze exact git-added record list with rename detection
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd /tmp/massbank-git
+          git -c diff.renames=true diff --find-renames --name-only --diff-filter=A \
+            "$MASSBANK_BASELINE_SHA" "$MASSBANK_CURRENT_SHA" -- '*.txt' \
+            | LC_ALL=C sort -u > /tmp/massbank-added-txt-paths.txt
+          test -s /tmp/massbank-added-txt-paths.txt
+          echo "git-added .txt paths: $(wc -l < /tmp/massbank-added-txt-paths.txt)"
+          sha256sum /tmp/massbank-added-txt-paths.txt
+
+      - name: Run label-free post-release feasibility audit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p results/massbank_postrelease_v53
+          PYTHONPATH=src:. python scripts/audit_massbank_postrelease_lockbox.py \
+            /tmp/massbank-current \
+            /tmp/massbank-baseline \
+            --added-paths-file /tmp/massbank-added-txt-paths.txt \
+            --current-sha "$MASSBANK_CURRENT_SHA" \
+            --baseline-sha "$MASSBANK_BASELINE_SHA" \
+            --out-json results/massbank_postrelease_v53/feasibility.json \
+            --out-manifest results/massbank_postrelease_v53/feasibility_manifest.csv
+          cp /tmp/massbank-added-txt-paths.txt results/massbank_postrelease_v53/git_added_txt_paths.txt
+
+      - name: Enforce predeclared serious-result feasibility gate without ranking
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          p = Path('results/massbank_postrelease_v53/feasibility.json')
+          d = json.loads(p.read_text())
+          assert d['design']['ranking_scores_computed'] is False
+          assert d['guardrails']['label_free'] is True
+          assert d['guardrails']['renames_and_modifications_excluded_by_git_diff'] is True
+
+          novel = d['coverage']['eligible_novel_structure']
+          added = d['coverage']['eligible_added_spectrum']
+          gate = {
+              'novel_queries_ge_50': int(novel['queries']) >= 50,
+              'novel_formula_blocks_ge_20': int(novel['formula_blocks']) >= 20,
+              'novel_queries_pool_ge_5_ge_10': int(novel['queries_by_min_pool_size']['ge_5']) >= 10,
+          }
+          report = {
+              'ranking_opened': False,
+              'primary_cohort': 'novel_structure',
+              'predeclared_gate': gate,
+              'primary': novel,
+              'secondary_added_spectrum': added,
+              'rule': 'all three primary feasibility conditions must pass before any rank or score is computed',
+          }
+          out = Path('results/massbank_postrelease_v53/feasibility_gate.json')
+          out.write_text(json.dumps(report, indent=2) + '\n')
+          print(json.dumps(report, indent=2))
+          if not all(gate.values()):
+              raise SystemExit('PREDECLARED SERIOUS-RESULT FEASIBILITY GATE FAILED. Do not run ranking on this cohort.')
+          print('PREDECLARED SERIOUS-RESULT FEASIBILITY GATE PASSED; rankings remain unopened.')
+          PY
+
+      - name: Record provenance
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results/massbank_postrelease_v53
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path('results/massbank_postrelease_v53/provenance.json').write_text(json.dumps({
+              'user_repo_sha': os.environ.get('GITHUB_SHA'),
+              'frozen_v53_parent_sha': '0006c7f81c7dfac53da48690ca0fe627108b9767',
+              'massbank_baseline_sha': os.environ['MASSBANK_BASELINE_SHA'],
+              'massbank_current_sha': os.environ['MASSBANK_CURRENT_SHA'],
+              'ranking_opened': False,
+              'role': 'label_free_postrelease_feasibility_only',
+              'primary_gate': {
+                  'novel_queries': 50,
+                  'novel_formula_blocks': 20,
+                  'novel_queries_with_pool_ge_5': 10,
+              },
+          }, indent=2) + '\n')
+          PY
+
+      - name: Upload feasibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: massbank-postrelease-v53-feasibility
+          path: results/massbank_postrelease_v53/
+          if-no-files-found: warn
+          retention-days: 90
