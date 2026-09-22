@@ -40,11 +40,10 @@ def _value(lines: list[str], prefix: str) -> str:
 def _parse_energy(lines: list[str]) -> float | None:
     prefix = "AC$MASS_SPECTROMETRY: COLLISION_ENERGY"
     for line in lines:
-        if not line.startswith(prefix):
-            continue
-        m = re.search(r"([-+]?[0-9]+(?:\.[0-9]+)?)\s*(?:eV)?", line[len(prefix):], re.I)
-        if m:
-            return float(m.group(1))
+        if line.startswith(prefix):
+            m = re.search(r"([-+]?[0-9]+(?:\.[0-9]+)?)\s*(?:eV)?", line[len(prefix):], re.I)
+            if m:
+                return float(m.group(1))
     return None
 
 
@@ -84,11 +83,7 @@ def parse_record(path: Path, root: Path) -> Record | None:
 
 
 def _in_scope(r: Record) -> bool:
-    return (
-        r.ms_type.upper() == "MS2"
-        and r.ion_mode.upper() == "POSITIVE"
-        and r.precursor_type.replace(" ", "") == "[M+H]+"
-    )
+    return r.ms_type.upper() == "MS2" and r.ion_mode.upper() == "POSITIVE" and r.precursor_type.replace(" ", "") == "[M+H]+"
 
 
 def _is_energy(x: float, target: float) -> bool:
@@ -102,8 +97,7 @@ def _quantiles(values: list[int]) -> dict[str, float | int | None]:
     def q(p: float) -> float:
         if len(xs) == 1:
             return float(xs[0])
-        z = p * (len(xs) - 1)
-        lo = int(math.floor(z)); hi = int(math.ceil(z))
+        z = p * (len(xs) - 1); lo = int(math.floor(z)); hi = int(math.ceil(z))
         if lo == hi:
             return float(xs[lo])
         a = z - lo
@@ -120,21 +114,18 @@ def _tree_hash(paths: list[Path], root: Path) -> str:
     return h.hexdigest()
 
 
-def build_audit(current_root: Path, baseline_root: Path, *, current_sha: str, baseline_sha: str) -> tuple[dict, list[dict]]:
+def build_audit(current_root: Path, baseline_root: Path, added_paths: set[str], *, current_sha: str, baseline_sha: str) -> tuple[dict, list[dict]]:
     current_paths = sorted(current_root.rglob("*.txt"))
     baseline_paths = sorted(baseline_root.rglob("*.txt"))
-    baseline_rel = {str(p.relative_to(baseline_root)).replace("\\", "/") for p in baseline_paths}
-
     current_records = [r for p in current_paths if (r := parse_record(p, current_root)) is not None and _in_scope(r)]
     baseline_records = [r for p in baseline_paths if (r := parse_record(p, baseline_root)) is not None and _in_scope(r)]
     baseline_structures = {r.connectivity_key for r in baseline_records}
 
-    # "New query" means the exact record path did not exist at the frozen baseline.
-    # Renamed paths are separately guarded in the workflow via git diff --diff-filter=A.
-    added_records = [r for r in current_records if r.path not in baseline_rel]
+    # Strict temporal query provenance: only paths classified A(dded) by git with rename detection enabled.
+    added_records = [r for r in current_records if r.path in added_paths]
     new_query_records = [r for r in added_records if _is_energy(r.collision_energy_ev, QUERY_ENERGY)]
 
-    # Current pinned candidate library: all in-scope current records, but references are only 10/20/40 eV.
+    # Current pinned candidate library; references never use the held-out 30 eV query energy.
     by_structure: dict[str, list[Record]] = defaultdict(list)
     for r in current_records:
         by_structure[r.connectivity_key].append(r)
@@ -160,7 +151,6 @@ def build_audit(current_root: Path, baseline_root: Path, *, current_sha: str, ba
     for formula in by_formula:
         by_formula[formula] = sorted(set(by_formula[formula]))
 
-    # Deterministically retain one newly-added 30 eV query per 2D structure.
     query_by_structure: dict[str, Record] = {}
     for r in sorted(new_query_records, key=lambda r: (r.connectivity_key, r.accession, r.path)):
         query_by_structure.setdefault(r.connectivity_key, r)
@@ -197,25 +187,13 @@ def build_audit(current_root: Path, baseline_root: Path, *, current_sha: str, ba
             "queries": len(rows),
             "formula_blocks": len({r["formula"] for r in rows}),
             "pool_size": _quantiles(pools),
-            "queries_by_min_pool_size": {
-                "ge_2": sum(n >= 2 for n in pools),
-                "ge_5": sum(n >= 5 for n in pools),
-                "ge_10": sum(n >= 10 for n in pools),
-                "ge_20": sum(n >= 20 for n in pools),
-            },
-            "formula_blocks_by_min_pool_size": {
-                "ge_2": len({r["formula"] for r in rows if int(r["candidate_count"]) >= 2}),
-                "ge_5": len({r["formula"] for r in rows if int(r["candidate_count"]) >= 5}),
-                "ge_10": len({r["formula"] for r in rows if int(r["candidate_count"]) >= 10}),
-                "ge_20": len({r["formula"] for r in rows if int(r["candidate_count"]) >= 20}),
-            },
+            "queries_by_min_pool_size": {k: sum(n >= t for n in pools) for k, t in (("ge_2",2),("ge_5",5),("ge_10",10),("ge_20",20))},
+            "formula_blocks_by_min_pool_size": {k: len({r["formula"] for r in rows if int(r["candidate_count"]) >= t}) for k, t in (("ge_2",2),("ge_5",5),("ge_10",10),("ge_20",20))},
         }
 
-    novel_structure_rows = [r for r in manifest if bool(r["structure_novel_at_baseline"])]
-    added_spectrum_rows = manifest
+    novel_rows = [r for r in manifest if bool(r["structure_novel_at_baseline"])]
     directory_counts = Counter(r.path.split("/", 1)[0] for r in added_records)
     query_directory_counts = Counter(r["query_path"].split("/", 1)[0] for r in manifest)
-
     summary = {
         "status": "MASSBANK_POSTRELEASE_LABEL_FREE_FEASIBILITY_AUDIT",
         "dataset": {
@@ -223,15 +201,16 @@ def build_audit(current_root: Path, baseline_root: Path, *, current_sha: str, ba
             "current_sha": current_sha,
             "baseline_txt_files": len(baseline_paths),
             "current_txt_files": len(current_paths),
+            "strict_git_added_txt_paths": len(added_paths),
             "current_tree_sha256": _tree_hash(current_paths, current_root),
             "baseline_tree_sha256": _tree_hash(baseline_paths, baseline_root),
             "in_scope_current_records": len(current_records),
             "in_scope_baseline_records": len(baseline_records),
-            "added_path_in_scope_records": len(added_records),
-            "added_path_directory_counts": dict(sorted(directory_counts.items())),
+            "strict_git_added_in_scope_records": len(added_records),
+            "added_directory_counts": dict(sorted(directory_counts.items())),
         },
         "design": {
-            "query_rule": "one deterministic 30 eV query per 2D structure from record paths absent at baseline",
+            "query_rule": "one deterministic 30 eV query per 2D structure from paths classified git-added after baseline",
             "candidate_rule": "all current-pinned 2D structures sharing exact molecular formula with complete 10/20/40 eV references",
             "reference_energies_ev": list(REFERENCE_ENERGIES),
             "query_energy_ev": QUERY_ENERGY,
@@ -243,8 +222,8 @@ def build_audit(current_root: Path, baseline_root: Path, *, current_sha: str, ba
         "coverage": {
             "current_complete_reference_structures": len(complete_refs),
             "new_30ev_query_structures": len(query_by_structure),
-            "eligible_added_spectrum": cohort(added_spectrum_rows),
-            "eligible_novel_structure": cohort(novel_structure_rows),
+            "eligible_novel_structure": cohort(novel_rows),
+            "eligible_added_spectrum": cohort(manifest),
             "eligible_query_directory_counts": dict(sorted(query_directory_counts.items())),
         },
         "guardrails": {
@@ -266,12 +245,14 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("current_root", type=Path)
     p.add_argument("baseline_root", type=Path)
+    p.add_argument("--added-paths-file", type=Path, required=True)
     p.add_argument("--current-sha", required=True)
     p.add_argument("--baseline-sha", required=True)
     p.add_argument("--out-json", type=Path, required=True)
     p.add_argument("--out-manifest", type=Path, required=True)
     args = p.parse_args()
-    summary, manifest = build_audit(args.current_root, args.baseline_root, current_sha=args.current_sha, baseline_sha=args.baseline_sha)
+    added_paths = {line.strip().replace("\\", "/") for line in args.added_paths_file.read_text().splitlines() if line.strip().endswith(".txt")}
+    summary, manifest = build_audit(args.current_root, args.baseline_root, added_paths, current_sha=args.current_sha, baseline_sha=args.baseline_sha)
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     import csv
