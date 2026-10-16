@@ -204,7 +204,7 @@ def score_source(mgf,metadata_dir,out):
     manifest_path=metadata_dir/"frozen_triplets.jsonl"
     meta=json.loads(meta_path.read_text())
     manifest=[json.loads(x) for x in manifest_path.read_text().splitlines() if x.strip()]
-    if (meta.get("status")!="MULTIMS2_CID_20_40_60EV_METADATA_ONLY_V1"
+    if (meta.get("status") not in ("MULTIMS2_CID_20_40_60EV_METADATA_ONLY_V1","MULTIMS2_CID_20_40_60EV_METADATA_ONLY_V2_BRACKETED_CE")
         or meta.get("gate_pass") is not True
         or meta.get("outcome_scores_opened") is not False
         or meta.get("target_peak_locations_or_intensities_read") is not False):
@@ -236,6 +236,8 @@ def score_source(mgf,metadata_dir,out):
         "source_commit":UPSTREAM_COMMIT,
         "source_mgf_sha256":meta["raw_sha256"],
         "metadata_gate_sha256":digest(meta_path),
+        "metadata_protocol_status":meta["status"],
+        "original_v1_gate_was_failed":bool(meta.get("original_v1_failed_metadata_run")==38969490208),
         "metadata_manifest_sha256":digest(manifest_path),
         "model_training":False,"adaptive_rule":"alpha=.25+.25*BC(endpoint_low,endpoint_high)",
         "t":0.5,"physical_protocol_eV":"upstream MultiMS2 documentation explicitly specifies CID 20/40/60 eV",
