@@ -139,8 +139,12 @@ def source_stats(rows):
         "mean_endpoint_BC":float(bcs.mean()),
         "median_endpoint_BC":float(np.median(bcs)),
         "endpoint_BC_quantiles":{str(v):float(np.quantile(bcs,v)) for v in (.05,.25,.5,.75,.95)},
-        "mean_left_exclusive_mass":float(np.mean([r["endpoint_exclusive_a_mass"] for r in rows])),
-        "mean_right_exclusive_mass":float(np.mean([r["endpoint_exclusive_b_mass"] for r in rows])),
+        "mean_left_exclusive_mass":(
+            float(np.mean([r["endpoint_exclusive_a_mass"] for r in rows]))
+            if all("endpoint_exclusive_a_mass" in r for r in rows) else None),
+        "mean_right_exclusive_mass":(
+            float(np.mean([r["endpoint_exclusive_b_mass"] for r in rows]))
+            if all("endpoint_exclusive_b_mass" in r for r in rows) else None),
         "mean_quarter_minus_hellinger":float(vals.mean()),
         "mean_quarter_minus_support":float(x.mean()),
         "pearson_delta_vs_endpoint_BC_descriptive":pearson(vals,bcs),
