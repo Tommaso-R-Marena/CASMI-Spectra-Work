@@ -1,0 +1,106 @@
+name: multims2-metadata-only-gate-v2-bracket-CE
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/multims2-prospective-cid-20261016]
+    paths:
+      - '.github/workflows/multims2-metadata-only-gate-v2-bracket-CE.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  FROZEN_V2_GATE_SHA: de08513fbef734648110d4c91961a338141a24c6
+
+jobs:
+  source-gate-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Confirm bracket CE repair is frozen and original scientific gate unchanged
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin "$FROZEN_V2_GATE_SHA"
+          git diff --exit-code "$FROZEN_V2_GATE_SHA" -- \
+            docs/MULTIMS2_METADATA_GATE_V2_CE_BRACKETS.md \
+            scripts/audit_multims2_third_source_metadata_v2.py \
+            tests/test_multims2_header_v2_brackets.py
+          git fetch --depth=1 origin e13282fe827cf84955359b16576454774d3c7ba5
+          git diff --exit-code e13282fe827cf84955359b16576454774d3c7ba5 -- \
+            docs/MULTIMS2_THIRD_SOURCE_FROZEN_PROTOCOL_V1.md \
+            scripts/audit_multims2_third_source_metadata.py
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Fetch exact unchanged prior-source manifests and discovery exclusions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/msnlib frozen/massbank frozen/expolib /tmp/multims2 results/multims2_metadata_v2
+          gh run download 38934839645 --repo "$GITHUB_REPOSITORY" \
+            --name posthoc-massbank-structure-nonoverlap-and-source-robustness --dir frozen/msnlib
+          gh run download 38918658343 --repo "$GITHUB_REPOSITORY" \
+            --name massbank-2026-03-frozen-external-efficacy --dir frozen/massbank
+          gh run download 38964190641 --repo "$GITHUB_REPOSITORY" \
+            --name expolib-v1-independent-header-only-feasibility --dir frozen/expolib
+          echo '5520ecb3f134290953fd5ad63b97cc1561dd39c2ea658aeaf4a90b2be348d07a  frozen/msnlib/prior_evaluated_key_inventory.json' | sha256sum -c -
+          echo '265dfb75e33d2eff3f19945255bddb5db0c0f7f9161593ada80cd2b50ecac9c4  frozen/massbank/label_free_triplets.jsonl' | sha256sum -c -
+          echo '095340d967b177077ce517da7aa332795ce691899cc1320563cce07a76a68560  frozen/expolib/nominal_energy_triplets.jsonl' | sha256sum -c -
+      - name: Download original MCEBIO-positive discovery identity source
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 6 --retry-all-errors --retry-delay 4 --connect-timeout 30 --max-time 1500 \
+            'https://zenodo.org/records/21105617/files/20241003_mcebio_pos_ms2.json?download=1' \
+            -o /tmp/multims2/original_discovery.json
+          echo '806f33c9c60af74a0aa21fb66aeb84f3  /tmp/multims2/original_discovery.json' | md5sum -c -
+      - name: Download exact original MultiMS2 pinned Git blob
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 6 --retry-all-errors --retry-delay 4 --connect-timeout 30 --max-time 2400 \
+            'https://raw.githubusercontent.com/zamboni-lab/MultiMS2/659bd9b608408a75ecbb4b03295ed4c03ba52539/data/multims2_spectra.mgf' \
+            -o /tmp/multims2/original_source.mgf
+          test "$(stat -c '%s' /tmp/multims2/original_source.mgf)" = '77183510'
+          test "$(git hash-object /tmp/multims2/original_source.mgf)" = '5ca1b01d1c6c5b2930658a6cd32ee2659070b49d'
+          echo '4ef86f75a12ad2fdadbd63732e2d6690f4e506a6ff08f171758c1808d1249673  /tmp/multims2/original_source.mgf' | sha256sum -c -
+      - name: Rerun unchanged scientific feasibility with ONLY frozen exact bracket-CE parsing
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_multims2_third_source_metadata_v2.py \
+            --mgf /tmp/multims2/original_source.mgf \
+            --discovery /tmp/multims2/original_discovery.json \
+            --prior-inventory frozen/msnlib/prior_evaluated_key_inventory.json \
+            --massbank-manifest frozen/massbank/label_free_triplets.jsonl \
+            --expolib-manifest frozen/expolib/nominal_energy_triplets.jsonl \
+            --out results/multims2_metadata_v2
+          cat results/multims2_metadata_v2/feasibility.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Record v1 failure and v2 repair provenance
+        if: always()
+        run: |
+          mkdir -p results/multims2_metadata_v2
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          payload={
+            "status":"METADATA ONLY: NO TARGET SPECTRAL SCORES OPENED",
+            "original_v1_gate_run":38969490208,
+            "v1_ce_header_diagnostic_run":38969970105,
+            "frozen_v2_gate_sha":os.getenv("FROZEN_V2_GATE_SHA"),
+            "workflow_head_sha":os.getenv("GITHUB_SHA"),
+            "original_science_gate_thresholds_or_exclusions_changed":False,
+            "target_peak_intensity_scored":False,
+          }
+          (Path("results/multims2_metadata_v2")/"provenance.json").write_text(json.dumps(payload,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: multims2-third-source-metadata-v2-fixed-brackets
+          path: results/multims2_metadata_v2/
+          if-no-files-found: warn
+          retention-days: 90
