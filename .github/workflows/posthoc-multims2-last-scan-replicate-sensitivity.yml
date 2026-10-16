@@ -1,3 +1,4 @@
+# Retry after eliminating test-collection global CE decoder mutation; original source/scorer unchanged.
 name: posthoc-multims2-last-scan-replicate-sensitivity
 
 on:
