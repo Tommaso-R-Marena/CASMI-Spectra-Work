@@ -228,6 +228,10 @@ def render(out):
                      f"{part['mean_quarter_minus_fixed_hellinger']:+.6f} |")
     lines += ["",f"Contributor-equal-weighted Δ: {out['equal_contributor_weighted_mean_delta']:+.6f} "
               f"({out['n_contributors']} sources; not a population-generalization estimate).",
+              "",f"Exploratory exact source-label flips (2-sided): source-equal-weighted p="
+              f"{out['contributor_level_signflip_descriptive']['source_equal_weighted_two_sided_exact_p']:.6f}; "
+              f"query-weighted source-flip p="
+              f"{out['contributor_level_signflip_descriptive']['query_weighted_source_flip_two_sided_exact_p']:.6f}.",
               "",out["scientific_limitations"],""]
     return "\n".join(lines)
 
