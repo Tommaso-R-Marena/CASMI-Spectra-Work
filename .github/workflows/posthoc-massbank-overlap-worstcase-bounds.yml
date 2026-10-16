@@ -1,0 +1,49 @@
+name: posthoc-massbank-overlap-worstcase-bounds
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/massbank-robustness-nonoverlap-20261016]
+    paths:
+      - '.github/workflows/posthoc-massbank-overlap-worstcase-bounds.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sharp-overlap-bounds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test mathematical sharpness by exhaustive subset enumeration
+        run: |
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q tests/test_bound_massbank_overlap_effect.py
+      - name: Retrieve two original frozen artifacts only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/efficacy frozen/overlap
+          gh run download 38918658343 --repo "$GITHUB_REPOSITORY" --name massbank-2026-03-frozen-external-efficacy --dir frozen/efficacy
+          gh run download 38920155068 --repo "$GITHUB_REPOSITORY" --name posthoc-massbank-msnlib-structure-overlap --dir frozen/overlap
+      - name: Calculate exact best/worst possible no-overlap means without choosing labels
+        run: |
+          set -euxo pipefail
+          python scripts/bound_massbank_overlap_effect.py \
+            --efficacy-dir frozen/efficacy \
+            --overlap-dir frozen/overlap \
+            --out results/posthoc_massbank_worstcase_bounds
+          cat results/posthoc_massbank_worstcase_bounds/bounds.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: massbank-2026-03-structure-overlap-worstcase-bounds
+          path: results/posthoc_massbank_worstcase_bounds/
+          if-no-files-found: warn
+          retention-days: 90
