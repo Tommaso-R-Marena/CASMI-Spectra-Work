@@ -38,7 +38,26 @@ def test_massbank_parser_rejects_missing_identity_and_unknown_instrument():
     path="sample/record/ABC/TEST001.txt"
     assert m.parse_record_metadata(record(key="bad"),path) is None
     assert m.parse_record_metadata(record(instrument=""),path) is None
-    assert m.parse_record_metadata(record(), "not-a-record/TEST001.txt") is None
+    assert m.parse_record_metadata(record(), "TEST001.txt") is None
+    assert m.parse_record_metadata(record(), "record/TEST001.txt") is None
+
+
+def test_massbank_parser_accepts_official_release_contributor_layout():
+    # Official MassBank 2026.03 repository and release use contributor dirs.
+    for path in (
+        "AAFC/MSBNK-AAFC-AC000001.txt",
+        "MassBank-data-2026.03/AAFC/MSBNK-AAFC-AC000001.txt",
+        "MassBank-data-2026.03/record/AAFC/MSBNK-AAFC-AC000001.txt",
+    ):
+        got=m.parse_record_metadata(record(),path)
+        assert got is not None
+        assert got["contributor"]=="AAFC"
+    # Packaging correction never licenses ambiguous or uncalibrated energies.
+    for bad_energy in ("10 NCE", "20 V", "20 %", "10-40 eV", "20"):
+        assert m.parse_record_metadata(
+            record(energy=bad_energy),
+            "MassBank-data-2026.03/AAFC/MSBNK-AAFC-AC000001.txt",
+        ) is None
 
 
 def test_eligible_triplet_is_source_and_instrument_consistent():

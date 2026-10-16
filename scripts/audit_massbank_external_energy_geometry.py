@@ -64,13 +64,13 @@ def parse_record_metadata(text: str, path: str):
         return None
     if n < 5:
         return None
+    # The official 2026.03 ZIP uses contributor/<accession>.txt under an
+    # optional archive-root directory, not necessarily record/contributor/.
+    # Use the immediate parent as contributor; require an actual directory.
     parts = PurePosixPath(path).parts
-    if "record" not in parts:
+    if len(parts) < 2 or parts[-2] in {"record", "MassBank-data-2026.03"}:
         return None
-    idx = parts.index("record")
-    if idx + 1 >= len(parts) - 1:
-        return None
-    contributor = parts[idx + 1]
+    contributor = parts[-2]
     return {
         "inchikey": key.upper(), "formula": formula, "eV": energy,
         "instrument": instrument, "instrument_type": instrument_type,
