@@ -1,0 +1,52 @@
+name: multims2-v1-CE-header-diagnostic-no-peaks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/multims2-prospective-cid-20261016]
+    paths:
+      - '.github/workflows/multims2-v1-CE-header-diagnostic-no-peaks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-source-header-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test existing code and ensure original v1 metadata gate is untouched
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin e13282fe827cf84955359b16576454774d3c7ba5
+          git diff --exit-code e13282fe827cf84955359b16576454774d3c7ba5 -- \
+            docs/MULTIMS2_THIRD_SOURCE_FROZEN_PROTOCOL_V1.md \
+            scripts/audit_multims2_third_source_metadata.py
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Fetch exactly pinned third-source MGF, no target peaks read
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/multims2 results/multims2_v1_header_diagnostic
+          curl -L --fail --retry 5 --retry-all-errors --connect-timeout 30 --max-time 2400 \
+            'https://raw.githubusercontent.com/zamboni-lab/MultiMS2/659bd9b608408a75ecbb4b03295ed4c03ba52539/data/multims2_spectra.mgf' \
+            -o /tmp/multims2/multims2.mgf
+          test "$(stat -c '%s' /tmp/multims2/multims2.mgf)" = '77183510'
+          test "$(git hash-object /tmp/multims2/multims2.mgf)" = '5ca1b01d1c6c5b2930658a6cd32ee2659070b49d'
+      - name: Publish CE and identity header shape only
+        run: |
+          PYTHONPATH=src:. python scripts/diagnose_multims2_header_energy_representation.py \
+            --mgf /tmp/multims2/multims2.mgf \
+            --out results/multims2_v1_header_diagnostic
+          cat results/multims2_v1_header_diagnostic/metadata_diagnostic.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: multims2-v1-exact-CE-header-format-diagnostic
+          path: results/multims2_v1_header_diagnostic/
+          if-no-files-found: warn
+          retention-days: 90
