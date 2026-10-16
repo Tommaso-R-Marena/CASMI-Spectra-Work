@@ -1,0 +1,104 @@
+name: massbank-external-energy-geometry-feasibility
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/target-blind-energy-geometry-20261016]
+    paths:
+      - '.github/workflows/massbank-external-energy-geometry-feasibility.yml'
+
+permissions:
+  contents: read
+
+env:
+  FROZEN_AUDIT_SHA: b23ceee0a0d67adfb04cccc9536debb312930805
+
+jobs:
+  feasibility-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify frozen parser, source-exclusion and gates
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin "$FROZEN_AUDIT_SHA"
+          git diff --exit-code "$FROZEN_AUDIT_SHA" -- \
+            docs/MASSBANK_EXTERNAL_ENERGY_GEOMETRY_GATE.md \
+            scripts/audit_massbank_external_energy_geometry.py \
+            tests/test_massbank_external_feasibility.py
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Download MassBank frozen release and MCEBIO discovery metadata
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p results/massbank_external_energy_geometry
+          download_md5() {
+            url="$1"; dest="$2"; checksum="$3"
+            ok=0
+            for attempt in 1 2 3 4 5 6; do
+              rm -f "$dest"
+              if curl --location --fail --retry 3 --retry-all-errors --retry-delay 4 \
+                --connect-timeout 30 --max-time 2400 "$url" -o "$dest"; then
+                if echo "$checksum  $dest" | md5sum -c -; then ok=1; break; fi
+              fi
+              sleep 10
+            done
+            test "$ok" = 1
+          }
+          download_md5 "https://zenodo.org/records/19590880/files/MassBank/MassBank-data-2026.03.zip?download=1" \
+            /tmp/massbank.zip 1de9018361f7ffc689aa327f92e97e0f
+          download_md5 "https://zenodo.org/records/21105617/files/20241003_mcebio_pos_ms2.json?download=1" \
+            /tmp/mcebio_discovery.jsonl 806f33c9c60af74a0aa21fb66aeb84f3
+          sha256sum /tmp/massbank.zip /tmp/mcebio_discovery.jsonl | \
+            tee results/massbank_external_energy_geometry/input_sha256.txt
+      - name: Run exclusively label-free MassBank feasibility and overlap audit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_massbank_external_energy_geometry.py \
+            /tmp/massbank.zip \
+            --discovery-msnlib /tmp/mcebio_discovery.jsonl \
+            --out results/massbank_external_energy_geometry
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('results/massbank_external_energy_geometry/feasibility.json').read_text())
+          print('EXTERNAL_FEASIBILITY_GATE_PASS:', d['gate_pass'])
+          print('NO_EFFICACY_SCORED: True')
+          with open('/dev/stdout','w') as f:
+              print(json.dumps(d['coverage'],indent=2),file=f)
+          PY
+      - name: Record immutable provenance even when download fails
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results/massbank_external_energy_geometry
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path('results/massbank_external_energy_geometry')
+          p={
+            'massbank_zenodo_doi':'10.5281/zenodo.19590880',
+            'massbank_release':'2026.03',
+            'massbank_expected_md5':'1de9018361f7ffc689aa327f92e97e0f',
+            'discovery_zenodo':'21105617',
+            'discovery_expected_md5':'806f33c9c60af74a0aa21fb66aeb84f3',
+            'frozen_audit_sha':os.environ['FROZEN_AUDIT_SHA'],
+            'workflow_git_sha':os.getenv('GITHUB_SHA'),
+            'contains_spectral_similarity_or_rankings':False,
+          }
+          (root/'provenance.json').write_text(json.dumps(p,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: massbank-cross-instrument-energy-feasibility-only
+          path: results/massbank_external_energy_geometry/
+          if-no-files-found: warn
+          retention-days: 90
