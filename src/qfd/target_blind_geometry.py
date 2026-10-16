@@ -153,3 +153,28 @@ def target_blind_scores(query, low, high, t: float, *, tolerance_da=0.01):
         "reference_shared_bin_count": int(np.sum((p0>0)&(p1>0))),
         "reference_bins": len(p0),
     }
+
+
+def best_hellinger_chord_oracle(q, p0, p1):
+    """Answer-aware best Hellinger chord position, a NONDEPLOYABLE diagnostic.
+
+    Allows each query to choose any scalar position on the complete normalized
+    square-root chord, using the withheld spectrum. Thus it upper-bounds
+    every scalar energy warp for the SAME reference endpoint Hellinger path.
+    """
+    a = np.asarray(p0, dtype=float)
+    b = np.asarray(p1, dtype=float)
+    target = np.asarray(q, dtype=float)
+    if a.shape != b.shape or target.shape != a.shape:
+        raise ValueError("shapes must match")
+    if any(np.any(~np.isfinite(x)) for x in (a, b, target)):
+        raise ValueError("nonfinite data")
+    def objective(tau):
+        return affinity(target, power_mean_distribution(a, b, float(tau), 0.5))
+    fit = minimize_scalar(lambda tau: -objective(tau), bounds=(0.0, 1.0),
+                          method="bounded", options={"xatol": 1e-12})
+    candidates = [(0.0, objective(0.0)), (1.0, objective(1.0))]
+    if fit.success and math.isfinite(float(fit.fun)):
+        candidates.append((float(fit.x), objective(float(fit.x))))
+    best = max(candidates, key=lambda pair: pair[1])
+    return {"affinity": float(best[1]), "oracle_weight": float(best[0])}
