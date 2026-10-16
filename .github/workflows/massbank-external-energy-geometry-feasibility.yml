@@ -3,7 +3,7 @@ name: massbank-external-energy-geometry-feasibility
 on:
   workflow_dispatch:
   push:
-    branches: [research/target-blind-energy-geometry-20261016]
+    branches: [research/target-blind-energy-geometry-20261016, fix/massbank-contributor-layout-20261016]
     paths:
       - '.github/workflows/massbank-external-energy-geometry-feasibility.yml'
 
