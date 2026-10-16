@@ -11,7 +11,8 @@ permissions:
   contents: read
 
 env:
-  FROZEN_AUDIT_SHA: b23ceee0a0d67adfb04cccc9536debb312930805
+  # Corrected metadata file-layout parser; original coverage thresholds remain unchanged.
+  FROZEN_AUDIT_SHA: f027125817542bb24c29192290cda15492c3d3b5
 
 jobs:
   feasibility-only:
