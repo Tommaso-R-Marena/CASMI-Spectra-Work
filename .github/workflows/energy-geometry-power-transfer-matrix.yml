@@ -158,3 +158,36 @@ jobs:
           path: results/energy_geometry_power_transfer/${{ matrix.dataset }}/
           if-no-files-found: warn
           retention-days: 90
+
+  transfer-verdict:
+    name: Predeclared cross-cohort verdict
+    if: always()
+    needs: [transfer]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect all available matrix artifacts
+        run: mkdir -p collected results/power_transfer_verdict
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: energy-geometry-power-transfer-*
+          path: collected
+          merge-multiple: false
+      - name: Audit provenance and report without imputing missing results
+        run: |
+          python scripts/summarize_power_transfer.py \
+            --root collected \
+            --out results/power_transfer_verdict
+          cat results/power_transfer_verdict/verdict.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve machine-readable cross-cohort verdict
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: energy-geometry-power-transfer-verdict
+          path: results/power_transfer_verdict/
+          if-no-files-found: warn
+          retention-days: 90
