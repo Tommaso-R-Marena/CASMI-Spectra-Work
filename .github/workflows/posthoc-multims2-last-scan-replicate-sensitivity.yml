@@ -1,0 +1,87 @@
+name: posthoc-multims2-last-scan-replicate-sensitivity
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/multims2-replicate-selection-robustness-20261016]
+    paths:
+      - '.github/workflows/posthoc-multims2-last-scan-replicate-sensitivity.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  first-vs-last:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Ensure frozen original source and interpolation functions unchanged
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin 6c38b731815c19a13b660b86a985ee7387c3b278
+          git diff --exit-code 6c38b731815c19a13b660b86a985ee7387c3b278 -- \
+            scripts/audit_multims2_third_source_metadata.py \
+            scripts/audit_multims2_third_source_metadata_v2.py \
+            scripts/benchmark_multims2_third_source_geometry.py \
+            scripts/benchmark_multims2_third_source_geometry_v2.py \
+            src/qfd/power_geometry.py \
+            src/qfd/target_blind_geometry.py \
+            src/qfd/stats.py
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Download pinned 1781-query original metadata and original paired-score artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/meta frozen/original /tmp/multims2 results/multims2_last_replicate
+          gh run download 38970318925 --repo "$GITHUB_REPOSITORY" \
+            --name multims2-third-source-metadata-v2-fixed-brackets --dir frozen/meta
+          gh run download 38970610885 --repo "$GITHUB_REPOSITORY" \
+            --name multims2-third-independent-source-frozen-geometry --dir frozen/original
+          echo '5345f532ded9baa4134d38b840a6e05a1b1f85b3cf19923569ea80d96f46289d  frozen/meta/frozen_triplets.jsonl' | sha256sum -c -
+          echo '941648b8653cf2ea258f357793e61f1da8162886a2c833d13239dcc714ca8377  frozen/meta/feasibility.json' | sha256sum -c -
+          echo 'f97bfaee05e9197cdaa96ad995ab9019c995274820ff57f3b04bd04de12c2be6  frozen/original/rows.jsonl' | sha256sum -c -
+          echo '1693afcad9da7103875d9333bb0e43980ac222f77e5b25c106c1d458b2fcaef8  frozen/original/result.json' | sha256sum -c -
+      - name: Fetch identical original pinned 77MB MultiMS2 source
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 6 --retry-all-errors --retry-delay 4 --connect-timeout 30 --max-time 2400 \
+            'https://raw.githubusercontent.com/zamboni-lab/MultiMS2/659bd9b608408a75ecbb4b03295ed4c03ba52539/data/multims2_spectra.mgf' \
+            -o /tmp/multims2/unchanged.mgf
+          echo '4ef86f75a12ad2fdadbd63732e2d6690f4e506a6ff08f171758c1808d1249673  /tmp/multims2/unchanged.mgf' | sha256sum -c -
+      - name: Same original structures, metadata-only LAST scan at 20,40,60; report unchanged geometry results
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_multims2_last_replicate_sensitivity.py \
+            --mgf /tmp/multims2/unchanged.mgf \
+            --metadata-dir frozen/meta \
+            --original-score-dir frozen/original \
+            --out results/multims2_last_replicate
+          cat results/multims2_last_replicate/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain posthoc status permanently
+        if: always()
+        run: |
+          mkdir -p results/multims2_last_replicate
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p={"classification":"POSTHOC ALTERNATIVE-REPLICATE ROBUSTNESS, NOT NEW ACQUISITION SOURCE",
+             "original_frozen_primary_run":38970610885,
+             "original_complete_gate_run":38970318925,
+             "predictor_parameter_retuning":False,
+             "primary_cohort_resized_or_filtered":False}
+          (Path("results/multims2_last_replicate")/"provenance.json").write_text(json.dumps(p,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: multims2-posthoc-1781-group-last-vs-first-scan-robustness
+          path: results/multims2_last_replicate/
+          if-no-files-found: warn
+          retention-days: 90
