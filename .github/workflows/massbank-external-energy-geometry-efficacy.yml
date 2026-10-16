@@ -1,0 +1,126 @@
+name: massbank-external-energy-geometry-efficacy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/massbank-contributor-layout-20261016]
+    paths:
+      - '.github/workflows/massbank-external-energy-geometry-efficacy.yml'
+
+permissions:
+  contents: read
+
+env:
+  FROZEN_AUDIT_SHA: f027125817542bb24c29192290cda15492c3d3b5
+  FROZEN_EFFICACY_SHA: e440a0e2ed5e9b79b24986e7da0a49c6b60079e1
+
+jobs:
+  frozen-external-efficacy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify frozen implementation and gate; run all tests
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin "$FROZEN_AUDIT_SHA"
+          git fetch --depth=1 origin "$FROZEN_EFFICACY_SHA"
+          git diff --exit-code "$FROZEN_AUDIT_SHA" -- \
+            docs/MASSBANK_EXTERNAL_ENERGY_GEOMETRY_GATE.md \
+            scripts/audit_massbank_external_energy_geometry.py \
+            tests/test_massbank_external_feasibility.py
+          git diff --exit-code "$FROZEN_EFFICACY_SHA" -- \
+            docs/MASSBANK_EXTERNAL_ENERGY_GEOMETRY_SCORING_PROTOCOL.md \
+            scripts/benchmark_massbank_external_energy_geometry.py \
+            src/qfd/target_blind_geometry.py \
+            src/qfd/power_geometry.py \
+            src/qfd/stats.py \
+            tests/test_massbank_external_scorer.py
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Download original 2026.03 MassBank and MCEBIO discovery (MD5-pinned)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p results/massbank_frozen_external_efficacy
+          download_md5() {
+            url="$1"; dest="$2"; checksum="$3"
+            ok=0
+            for attempt in 1 2 3 4 5 6; do
+              rm -f "$dest"
+              if curl --location --fail --retry 3 --retry-all-errors --retry-delay 4 \
+                --connect-timeout 30 --max-time 2400 "$url" -o "$dest"; then
+                if echo "$checksum  $dest" | md5sum -c -; then ok=1; break; fi
+              fi
+              sleep 10
+            done
+            test "$ok" = 1
+          }
+          download_md5 "https://zenodo.org/records/19590880/files/MassBank/MassBank-data-2026.03.zip?download=1" \
+            /tmp/massbank.zip 1de9018361f7ffc689aa327f92e97e0f
+          download_md5 "https://zenodo.org/records/21105617/files/20241003_mcebio_pos_ms2.json?download=1" \
+            /tmp/mcebio_discovery.jsonl 806f33c9c60af74a0aa21fb66aeb84f3
+          sha256sum /tmp/massbank.zip /tmp/mcebio_discovery.jsonl > \
+            results/massbank_frozen_external_efficacy/input_sha256.txt
+      - name: Reproduce label-free eligibility, require ALL six original thresholds
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_massbank_external_energy_geometry.py \
+            /tmp/massbank.zip --discovery-msnlib /tmp/mcebio_discovery.jsonl \
+            --out results/massbank_frozen_external_efficacy
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          gate=json.loads(Path("results/massbank_frozen_external_efficacy/feasibility.json").read_text())
+          original={"query_triplets":2138,"structures":715,"formula_blocks":613,
+                    "offcenter_triplets":259,"non_orbitrap_triplets":1853,
+                    "non_orbitrap_structures":647}
+          assert gate["gate_pass"] is True, "Predeclared feasibility gate failed: DO NOT SCORE"
+          assert all(gate["coverage"][k] == v for k,v in original.items()), (
+              "External cohort changed since metadata-only feasibility: DO NOT SCORE")
+          print("PREDECLARED_GATE_PASS:",gate["gate_pass"])
+          print("EXACT_METADATA_COHORT_REPLAY:",original)
+          PY
+      - name: Score FROZEN prediction methods without fitting or tuning
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/benchmark_massbank_external_energy_geometry.py \
+            /tmp/massbank.zip \
+            --feasibility-dir results/massbank_frozen_external_efficacy \
+            --out results/massbank_frozen_external_efficacy
+      - name: Record immutable provenance even on failure
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results/massbank_frozen_external_efficacy
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path("results/massbank_frozen_external_efficacy")
+          p={
+              "evaluation_class":"FROZEN PREDECLARED EXTERNAL MASSBANK SCORING, SUBJECT TO OVERLAP LIMITS",
+              "source":"MassBank 2026.03","source_doi":"10.5281/zenodo.19590880",
+              "massbank_expected_md5":"1de9018361f7ffc689aa327f92e97e0f",
+              "discovery_expected_md5":"806f33c9c60af74a0aa21fb66aeb84f3",
+              "frozen_audit_sha":os.environ["FROZEN_AUDIT_SHA"],
+              "frozen_scoring_sha":os.environ["FROZEN_EFFICACY_SHA"],
+              "workflow_git_sha":os.environ.get("GITHUB_SHA"),
+              "all_prior_eligible_cohort_counts":[2138,715,613,259,1853,647],
+              "training_or_exponent_refitting":False,
+              "new_source_is_not_proof_of_independent_instrument_acquisition":True,
+          }
+          (root/"provenance.json").write_text(json.dumps(p,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: massbank-2026-03-frozen-external-efficacy
+          path: results/massbank_frozen_external_efficacy/
+          if-no-files-found: warn
+          retention-days: 90
