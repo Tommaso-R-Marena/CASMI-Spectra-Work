@@ -1,0 +1,206 @@
+name: protected-tail-v53-independent-msnlib-lockboxes
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v53-independent-msnlib-lockboxes]
+    paths:
+      - '.github/workflows/protected-tail-v53-independent-msnlib-lockboxes.yml'
+      - 'scripts/audit_msnlib_external_lockbox_feasibility.py'
+      - 'scripts/summarize_protected_tail_v53_lockbox.py'
+      - 'scripts/export_msnlib_exact_condition_candidates.py'
+      - 'scripts/analyze_protected_tail_v53.py'
+      - 'src/qfd/protected_tail_v52.py'
+      - 'src/qfd/protected_tail_v53.py'
+      - 'src/qfd/msnlib.py'
+      - 'src/qfd/msnlib_pilot.py'
+      - 'src/qfd/stats.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protected-tail-v53-independent-msnlib-lockboxes-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FROZEN_SELECTOR_SHA: 0006c7f81c7dfac53da48690ca0fe627108b9767
+
+jobs:
+  lockbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dataset: enamdisc
+            filename: 20241003_enamdisc_pos_ms2.json
+            md5: b02b3a996e25aa1ad1cb06e8ccebf816
+            nominal_compounds: 10240
+          - dataset: mcebio
+            filename: 20241003_mcebio_pos_ms2.json
+            md5: 806f33c9c60af74a0aa21fb66aeb84f3
+            nominal_compounds: 10315
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify frozen selector and test suite
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin "$FROZEN_SELECTOR_SHA"
+          git diff --exit-code "$FROZEN_SELECTOR_SHA" -- src/qfd/protected_tail_v52.py src/qfd/protected_tail_v53.py
+          python -m pip install -e '.[dev]'
+          python -m pip install pandas
+          PYTHONPATH=src:. pytest -q
+
+      - name: Download pinned public MSnLib chemical library
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "results/protected_tail_v53/${{ matrix.dataset }}"
+          curl -L --fail --retry 4 --retry-delay 3 \
+            "https://zenodo.org/records/21105617/files/${{ matrix.filename }}?download=1" \
+            -o /tmp/lockbox.jsonl
+          echo "${{ matrix.md5 }}  /tmp/lockbox.jsonl" | md5sum -c -
+          sha256sum /tmp/lockbox.jsonl | tee "results/protected_tail_v53/${{ matrix.dataset }}/input_sha256.txt"
+          test -s /tmp/lockbox.jsonl
+
+      - name: Label-free feasibility audit only
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_msnlib_external_lockbox_feasibility.py \
+            /tmp/lockbox.jsonl \
+            --dataset "${{ matrix.dataset }}" \
+            --out "results/protected_tail_v53/${{ matrix.dataset }}/feasibility.json"
+
+      - name: Enforce predeclared feasibility gate before opening rankings
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          dataset = "${{ matrix.dataset }}"
+          p = Path(f"results/protected_tail_v53/{dataset}/feasibility.json")
+          d = json.loads(p.read_text())
+          c = d['coverage']
+          g = d['predeclared_gate']
+          print(json.dumps({
+              'dataset': dataset,
+              'eligible_queries': c['eligible_queries'],
+              'eligible_formula_blocks': c['eligible_formula_blocks'],
+              'queries_pool_ge_5': c['queries_pool_ge_5'],
+              'gate': g,
+              'gate_pass': d['gate_pass'],
+          }, indent=2))
+          if not d['gate_pass']:
+              raise SystemExit('PREDECLARED LOCKBOX FEASIBILITY GATE FAILED. Rankings remain unopened.')
+          print('PREDECLARED LOCKBOX FEASIBILITY GATE PASSED. Frozen ranking may now be opened.')
+          PY
+
+      - name: Export frozen exact-condition candidate scores
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/export_msnlib_exact_condition_candidates.py \
+            /tmp/lockbox.jsonl \
+            --out "results/protected_tail_v53/${{ matrix.dataset }}/candidate_features.csv.gz" \
+            --summary "results/protected_tail_v53/${{ matrix.dataset }}/candidate_export_summary.json" \
+            --validation-fraction 0.5
+
+      - name: Verify scoring cohort exactly matches label-free feasibility cohort
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          dataset = "${{ matrix.dataset }}"
+          root = Path(f"results/protected_tail_v53/{dataset}")
+          f = json.loads((root / 'feasibility.json').read_text())
+          e = json.loads((root / 'candidate_export_summary.json').read_text())
+          assert f['coverage']['eligible_queries'] == e['queries'], (f['coverage']['eligible_queries'], e['queries'])
+          assert f['input']['sha256'] == e['input']['sha256'], (f['input']['sha256'], e['input']['sha256'])
+          print({'dataset': dataset, 'cohort_queries': e['queries'], 'candidate_rows': e['candidate_rows'], 'sha256': e['input']['sha256']})
+          PY
+
+      - name: Apply frozen v5.3 selector without retuning
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/analyze_protected_tail_v53.py \
+            "results/protected_tail_v53/${{ matrix.dataset }}/candidate_features.csv.gz" \
+            --out "results/protected_tail_v53/${{ matrix.dataset }}/protected_tail_v53.json" \
+            --overlap-threshold 0.8 \
+            --protected-k 1 \
+            --overlap-k 10 \
+            --head-survival-slack 1 \
+            --rr-cutoff 25 \
+            --role prospective_external_chemical_library_lockbox \
+            --guardrail 'Prospective chemical-library lockbox external to v5.3 selector development. Same MSnLib acquisition platform/pipeline, so this tests chemical-library transfer rather than cross-platform generalization. No lockbox outcome was used to retune the selector.'
+
+      - name: Run predeclared formula-block inference
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/summarize_protected_tail_v53_lockbox.py \
+            "results/protected_tail_v53/${{ matrix.dataset }}/candidate_features.csv.gz" \
+            "results/protected_tail_v53/${{ matrix.dataset }}/protected_tail_v53.json" \
+            --out "results/protected_tail_v53/${{ matrix.dataset }}/inference.json" \
+            --seed 20260922
+
+      - name: Record immutable provenance
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "results/protected_tail_v53/${{ matrix.dataset }}"
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          dataset = "${{ matrix.dataset }}"
+          root = Path(f"results/protected_tail_v53/{dataset}")
+          inp = Path('/tmp/lockbox.jsonl')
+          provenance = {
+              'dataset': dataset,
+              'zenodo_record': '21105617',
+              'filename': "${{ matrix.filename }}",
+              'expected_md5': "${{ matrix.md5 }}",
+              'nominal_compounds': int("${{ matrix.nominal_compounds }}"),
+              'input_sha256': hashlib.sha256(inp.read_bytes()).hexdigest() if inp.exists() else None,
+              'frozen_selector_sha': os.environ['FROZEN_SELECTOR_SHA'],
+              'workflow_git_sha': os.environ.get('GITHUB_SHA'),
+              'selector_parameters': {
+                  'overlap_threshold': 0.8,
+                  'protected_k': 1,
+                  'overlap_k': 10,
+                  'head_survival_slack': 1,
+                  'tail_rule': 'minimax(max(tie-aware static rank, tie-aware expert rank))',
+              },
+              'predeclared_feasibility_gate': {
+                  'eligible_queries_min': 100,
+                  'eligible_formula_blocks_min': 30,
+                  'queries_pool_ge_5_min': 30,
+              },
+              'primary_inference': 'formula-blocked query-weighted delta tie-aware MRR@25, v5.3 minus static',
+              'independence_scope': 'independent chemical library within the same MSnLib acquisition platform and processing pipeline',
+              'no_retuning_on_lockbox': True,
+          }
+          (root / 'provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
+          PY
+
+      - name: Upload lockbox audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: protected-tail-v53-${{ matrix.dataset }}-lockbox
+          path: results/protected_tail_v53/${{ matrix.dataset }}/
+          if-no-files-found: warn
+          retention-days: 90

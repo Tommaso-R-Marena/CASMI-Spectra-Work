@@ -1,0 +1,109 @@
+{
+  "files": [
+    {
+      "path": "casmi_2016/all_smiles.txt",
+      "size_bytes": 9958012
+    },
+    {
+      "path": "casmi_2016/cand_df.pkl",
+      "size_bytes": 4125980
+    },
+    {
+      "path": "casmi_2016/mol_df.pkl",
+      "size_bytes": 138318878
+    },
+    {
+      "path": "casmi_2016/spec_df.pkl",
+      "size_bytes": 213292
+    }
+  ],
+  "pickles": {
+    "casmi_2016/cand_df.pkl": {
+      "column_names": [
+        "candidate_mol_id",
+        "query_mol_id"
+      ],
+      "columns": 2,
+      "dtypes": {
+        "candidate_mol_id": "int64",
+        "query_mol_id": "int64"
+      },
+      "nunique": {
+        "candidate_mol_id": 234549,
+        "query_mol_id": 179
+      },
+      "rows": 257827,
+      "sample_values": {
+        "candidate_mol_id": "np.int64(230410)",
+        "query_mol_id": "np.int64(171048)"
+      },
+      "type": "DataFrame"
+    },
+    "casmi_2016/mol_df.pkl": {
+      "error": "ModuleNotFoundError: No module named 'rdkit'",
+      "type": "unreadable"
+    },
+    "casmi_2016/spec_df.pkl": {
+      "column_names": [
+        "spec_id",
+        "prec_mz",
+        "ion_mode",
+        "mol_id",
+        "peaks",
+        "prec_type",
+        "ace",
+        "nce",
+        "inst_type",
+        "frag_mode",
+        "res",
+        "spec_type",
+        "group_id"
+      ],
+      "columns": 13,
+      "dtypes": {
+        "ace": "float64",
+        "frag_mode": "object",
+        "group_id": "int64",
+        "inst_type": "object",
+        "ion_mode": "object",
+        "mol_id": "int64",
+        "nce": "float64",
+        "peaks": "object",
+        "prec_mz": "float64",
+        "prec_type": "object",
+        "res": "int64",
+        "spec_id": "int64",
+        "spec_type": "object"
+      },
+      "nunique": {
+        "ace": 0,
+        "group_id": 198,
+        "ion_mode": 2,
+        "mol_id": 179,
+        "nce": 0,
+        "prec_mz": 195,
+        "prec_type": 2,
+        "res": 1,
+        "spec_id": 198
+      },
+      "rows": 198,
+      "sample_values": {
+        "ace": null,
+        "frag_mode": "'HCD'",
+        "group_id": "np.int64(1)",
+        "inst_type": "'FT'",
+        "ion_mode": "'N'",
+        "mol_id": "np.int64(171048)",
+        "nce": null,
+        "peaks": "[np.record((107.0491, 11496.1), dtype=[('mz', '<f8'), ('ints', '<f8')]), np.record((131.0502, 12601.5), dtype=[('mz', '<f8'), ('ints', '<f8')]), np.record((157.0533, 11285.7), dtype=[('mz', '<f8'), ('ints', '<f8')]), np.record((158.0611, 2146837.0), dtype=[('mz', '<f8'), ('ints', '<f8')]), np.rec...",
+        "prec_mz": "np.float64(222.023)",
+        "prec_type": "'[M-H]-'",
+        "res": "np.int64(4)",
+        "spec_id": "np.int64(1)",
+        "spec_type": "'MS2'"
+      },
+      "type": "DataFrame"
+    }
+  },
+  "root": "/tmp/casmi2016"
+}

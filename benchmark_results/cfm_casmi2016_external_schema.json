@@ -1,0 +1,95 @@
+{
+  "files": [
+    {
+      "path": "cfm/casmi_rb_spec_df.pkl",
+      "size_bytes": 20629
+    },
+    {
+      "path": "cfm/casmi_spec_df.pkl",
+      "size_bytes": 225251650
+    }
+  ],
+  "pickles": {
+    "cfm/casmi_rb_spec_df.pkl": {
+      "column_names": [
+        "peaks",
+        "mol_id",
+        "formula",
+        "ace",
+        "prec_type",
+        "ion_mode",
+        "prec_mz"
+      ],
+      "columns": 7,
+      "dtypes": {
+        "ace": "int64",
+        "formula": "object",
+        "ion_mode": "object",
+        "mol_id": "int64",
+        "peaks": "object",
+        "prec_mz": "float64",
+        "prec_type": "object"
+      },
+      "nunique": {
+        "ace": 3,
+        "formula": 0,
+        "ion_mode": 1,
+        "mol_id": 75,
+        "prec_mz": 20,
+        "prec_type": 2
+      },
+      "rows": 225,
+      "sample_values": {
+        "ace": "np.int64(10)",
+        "formula": null,
+        "ion_mode": "'P'",
+        "mol_id": "np.int64(4487)",
+        "peaks": "[(329.05751, 1000.0)]",
+        "prec_mz": "np.float64(329.05806157600006)",
+        "prec_type": "'[M+H]+'"
+      },
+      "type": "DataFrame"
+    },
+    "cfm/casmi_spec_df.pkl": {
+      "column_names": [
+        "peaks",
+        "mol_id",
+        "prec_type",
+        "ion_mode",
+        "formula",
+        "prec_mz",
+        "ace"
+      ],
+      "columns": 7,
+      "dtypes": {
+        "ace": "int64",
+        "formula": "object",
+        "ion_mode": "object",
+        "mol_id": "int64",
+        "peaks": "object",
+        "prec_mz": "float64",
+        "prec_type": "object"
+      },
+      "nunique": {
+        "ace": 3,
+        "formula": 1635,
+        "ion_mode": 1,
+        "mol_id": 221263,
+        "prec_mz": 1630,
+        "prec_type": 1
+      },
+      "rows": 663789,
+      "sample_values": {
+        "ace": "np.int64(10)",
+        "formula": "'C17H19NO4'",
+        "ion_mode": "'P'",
+        "mol_id": "np.int64(502)",
+        "peaks": "[(49.00728, 136.7), (63.02293, 85.7), (75.02293, 286.7), (77.03858, 451.7), (89.03858, 245.5), (91.05423, 251.8), (105.06988, 1000.0), (119.04914, 147.0), (120.08078, 143.8), (121.06479, 142.9), (122.09643, 426.0), (123.04406, 73.3), (148.07569, 71.39999999999999), (149.05971, 66.8), (172.0393, 6...",
+        "prec_mz": "np.float64(302.13868)",
+        "prec_type": "'[M+H]+'"
+      },
+      "type": "DataFrame"
+    }
+  },
+  "root": "/tmp/cfm"
+}

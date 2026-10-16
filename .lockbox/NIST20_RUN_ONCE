@@ -1,0 +1,7 @@
+NIST20 Outlier one-shot third-domain lockbox authorization.
+
+Primary unit: one positive [M+H]+ spectrum per truth molecule, selected prospectively as the lowest spec_id after sorting by (mol_id, spec_id). This gives molecule-balanced evaluation and avoids replicate-count weighting.
+
+Model: benchmark_results/casmi_consensus_frozen_model.json, unchanged from the CASMI-2016 freeze and CASMI-2022 external lockbox.
+
+No NIST20 ranking outcome may be used to alter weights, gate parameters, feature definitions, or primary selection.

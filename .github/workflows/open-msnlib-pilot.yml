@@ -1,0 +1,63 @@
+name: open-msnlib-pilot
+
+on:
+  push:
+    branches: [msnlib-open-data]
+    paths:
+      - 'src/qfd/**'
+      - 'scripts/run_msnlib_open_pilot.py'
+      - 'scripts/audit_msnlib_slots.py'
+      - 'tests/test_msnlib_pilot.py'
+      - 'pyproject.toml'
+      - '.github/workflows/open-msnlib-pilot.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: open-msnlib-pilot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install project
+        run: python -m pip install -e '.[dev]'
+      - name: Run full test suite
+        run: PYTHONPATH=src pytest -q
+      - name: Download and verify open MSnLib OTAVA positive library
+        run: |
+          mkdir -p results/msnlib_open
+          curl -L --fail --retry 3 --retry-delay 2 \
+            'https://zenodo.org/records/21105617/files/20241003_otavapep_pos_ms2.json?download=1' \
+            -o /tmp/msnlib.jsonl
+          test -s /tmp/msnlib.jsonl
+          sha256sum /tmp/msnlib.jsonl | tee results/msnlib_open/input_sha256.txt
+          wc -l /tmp/msnlib.jsonl | tee results/msnlib_open/input_line_count.txt
+          echo '40379ce382fdc0622e313eb65e94937ac6f282f01be076e92d568683c5613db5  /tmp/msnlib.jsonl' | sha256sum -c -
+          test "$(wc -l < /tmp/msnlib.jsonl)" -eq 6670
+      - name: Audit acquisition slots
+        run: |
+          python scripts/audit_msnlib_slots.py /tmp/msnlib.jsonl \
+            --output results/msnlib_open/slot_audit.json
+      - name: Run real-data QFD and merged-energy pilots
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/run_msnlib_open_pilot.py /tmp/msnlib.jsonl \
+            --out-dir results/msnlib_open \
+            --bootstrap 1000 \
+            --hard-static-threshold 0.8 2>&1 | tee results/msnlib_open/run.log
+      - name: Show summary
+        run: cat results/msnlib_open/summary.json
+      - name: Upload pilot results and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msnlib-open-pilot-results
+          path: results/msnlib_open/
+          if-no-files-found: ignore

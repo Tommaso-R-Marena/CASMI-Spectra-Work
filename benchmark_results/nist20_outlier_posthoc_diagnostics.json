@@ -1,0 +1,91 @@
+{
+  "status": "POST_HOC_EXPLORATORY_ONLY__NOT_A_LOCKBOX_RESCUE",
+  "source_artifact": {
+    "workflow_run_id": 35611787591,
+    "artifact_id": 10645119389,
+    "artifact_sha256": "14ad27fd4eefec676746fccfa4cfd97bc42d3bd532a76632f91630ddede96e78",
+    "files_analyzed": ["per_query.csv", "candidate_features.csv.gz", "coverage.csv", "primary_selection.json", "run.log", "summary.json"]
+  },
+  "confirmatory_result": {
+    "delta_mrr": -0.001798375355354936,
+    "wins": 32,
+    "losses": 32,
+    "ties": 236,
+    "median_expected_rank_static": 106.0,
+    "median_expected_rank_gated": 91.25
+  },
+  "rank_cutoff_sensitivity": {
+    "topk_credit": [
+      {"k": 1, "static": 0.023451671183378504, "gated": 0.023729448961156276, "delta": 0.00027777777777777263},
+      {"k": 3, "static": 0.08083264702776899, "gated": 0.07658517228029423, "delta": -0.004247474747474764},
+      {"k": 5, "static": 0.12516178874137796, "gated": 0.1158082533878426, "delta": -0.00935353535353535},
+      {"k": 10, "static": 0.1914991932899507, "gated": 0.18637653816729555, "delta": -0.00512265512265514},
+      {"k": 25, "static": 0.3074541015335358, "gated": 0.3113006230779584, "delta": 0.0038465215444226097},
+      {"k": 50, "static": 0.3855636509702138, "gated": 0.39921201197489664, "delta": 0.013648361004682863},
+      {"k": 100, "static": 0.4859523809523809, "gated": 0.5042857142857142, "delta": 0.018333333333333313},
+      {"k": 250, "static": 0.6049739699538896, "gated": 0.5985884277852149, "delta": -0.006385542168674707}
+    ],
+    "reciprocal_rank": [
+      {"cutoff_k": 5, "static": 0.05808173231386753, "gated": 0.05555176598390119, "delta": -0.0025299663299663405},
+      {"cutoff_k": 10, "static": 0.06704177188264286, "gated": 0.06497656425076855, "delta": -0.0020652076318743162},
+      {"cutoff_k": 25, "static": 0.07443435602420294, "gated": 0.07263598066884801, "delta": -0.0017983753553549309},
+      {"cutoff_k": 50, "static": 0.07661415159193122, "gated": 0.07504420969670483, "delta": -0.0015699418952263844},
+      {"cutoff_k": 100, "static": 0.07802670982390375, "gated": 0.07655647638338377, "delta": -0.001470233440519983},
+      {"cutoff_k": 250, "static": 0.07882137956594491, "gated": 0.07721284827431074, "delta": -0.0016085312916341715},
+      {"cutoff_k": null, "static": 0.07935031316002901, "gated": 0.07775933151187385, "delta": -0.0015909816481551597}
+    ],
+    "interpretation": "Gated consensus improves some broader rank thresholds (25-100) but worsens the high-value top-3/top-5/top-10 region and MRR at every tested reciprocal-rank cutoff, including untruncated MRR."
+  },
+  "static_rank_strata": [
+    {"static_rank_stratum": "<=5", "n": 36, "used": 28, "static_mrr": 0.46401608997508464, "gated_mrr": 0.3485811671343825, "delta_mrr": -0.11543492284070218, "mean_drank": 8.61111111111111, "median_drank": 0.0, "wins": 3, "losses": 16},
+    {"static_rank_stratum": "6-25", "n": 56, "used": 41, "static_mrr": 0.09861905607031778, "gated_mrr": 0.14711439140814764, "delta_mrr": 0.04849533533782985, "mean_drank": 3.830357142857143, "median_drank": 0.0, "wins": 18, "losses": 14},
+    {"static_rank_stratum": "26-100", "n": 53, "used": 31, "static_mrr": 0.001944536381510102, "gated_mrr": 0.01606432380331202, "delta_mrr": 0.014119787421801918, "mean_drank": -2.009433962264151, "median_drank": 0.0, "wins": 7, "losses": 2},
+    {"static_rank_stratum": "101-500", "n": 67, "used": 33, "static_mrr": 0.0, "gated_mrr": 0.002269509005743648, "delta_mrr": 0.002269509005743648, "mean_drank": -10.246268656716419, "median_drank": 0.0, "wins": 4, "losses": 0},
+    {"static_rank_stratum": ">500", "n": 88, "used": 17, "static_mrr": 0.0, "gated_mrr": 0.0, "delta_mrr": 0.0, "mean_drank": 8.551136363636363, "median_drank": 0.0, "wins": 0, "losses": 0}
+  ],
+  "expert_gate_usage": {
+    "used_queries": 150,
+    "fallback_queries": 150,
+    "expert_used_static_mrr": 0.11743198309258063,
+    "expert_used_gated_mrr": 0.11383523238187077,
+    "expert_used_delta_mrr": -0.003596750710709869,
+    "fallback_delta_mrr": 0.0
+  },
+  "ablation_exploration": {
+    "original_full_gated": {"mrr": 0.07263598066884801, "top5": 0.1158082533878426, "median_rank": 91.25, "usage": 0.5},
+    "remove_energy_spread_same_overlap_rule": {
+      "mrr": 0.07385583875681968,
+      "delta_mrr_vs_static": -0.000578517267383255,
+      "top5": 0.13058603116562037,
+      "delta_top5_vs_static": 0.005424242424242415,
+      "median_rank": 114.0,
+      "usage": 0.97,
+      "bootstrap_95pct_delta_mrr": [-0.00968802, 0.00710067],
+      "posthoc_signflip_p_two_sided": 0.8965442069115862
+    },
+    "interpretation": "The negative energy-spread/coherence feature appears to be a transfer weakness for top-5 behavior, but removing it does not establish an MRR benefit."
+  },
+  "threshold_exploration": {
+    "grid": [
+      {"overlap_threshold": 0.0, "expert_usage_fraction": 1.0, "delta_mrr_vs_static": -0.010698895255640606, "delta_top5_vs_static": -0.023276815776815785, "median_expected_rank": 117.5},
+      {"overlap_threshold": 0.1, "expert_usage_fraction": 0.63, "delta_mrr_vs_static": -0.00620025077991343, "delta_top5_vs_static": -0.011020202020202013, "median_expected_rank": 100.75},
+      {"overlap_threshold": 0.2, "expert_usage_fraction": 0.5, "delta_mrr_vs_static": -0.0017983753553549309, "delta_top5_vs_static": -0.00935353535353535, "median_expected_rank": 91.25},
+      {"overlap_threshold": 0.3, "expert_usage_fraction": 0.4033333333333333, "delta_mrr_vs_static": -0.005774151149699536, "delta_top5_vs_static": -0.013999999999999985, "median_expected_rank": 94.25},
+      {"overlap_threshold": 0.4, "expert_usage_fraction": 0.33666666666666667, "delta_mrr_vs_static": -0.00489458764021608, "delta_top5_vs_static": -0.012333333333333321, "median_expected_rank": 103.75},
+      {"overlap_threshold": 0.5, "expert_usage_fraction": 0.27666666666666667, "delta_mrr_vs_static": -0.00463917008320644, "delta_top5_vs_static": -0.012333333333333321, "median_expected_rank": 103.75},
+      {"overlap_threshold": 0.6, "expert_usage_fraction": 0.23, "delta_mrr_vs_static": -0.001662017059570045, "delta_top5_vs_static": -0.005666666666666653, "median_expected_rank": 103.75},
+      {"overlap_threshold": 0.7, "expert_usage_fraction": 0.18, "delta_mrr_vs_static": -0.002831416453788274, "delta_top5_vs_static": -0.001777777777777767, "median_expected_rank": 105.0},
+      {"overlap_threshold": 0.8, "expert_usage_fraction": 0.13, "delta_mrr_vs_static": 0.0011673447913604224, "delta_top5_vs_static": 0.009888888888888892, "median_expected_rank": 106.0},
+      {"overlap_threshold": 0.9, "expert_usage_fraction": 0.07666666666666666, "delta_mrr_vs_static": -0.00041716103433434015, "delta_top5_vs_static": 0.006666666666666682, "median_expected_rank": 106.0},
+      {"overlap_threshold": 1.0, "expert_usage_fraction": 0.04666666666666667, "delta_mrr_vs_static": -0.0007363649785383092, "delta_top5_vs_static": 0.0016666666666666774, "median_expected_rank": 106.0}
+    ],
+    "threshold_0_8": {
+      "delta_mrr_vs_static": 0.0011673447913604267,
+      "used_queries": 39,
+      "bootstrap_95pct_delta_mrr": [-0.00574337, 0.00735286],
+      "posthoc_signflip_p_two_sided": 0.7476465047069906
+    },
+    "interpretation": "A stricter overlap gate can make the point estimate slightly positive, but this was chosen after seeing NIST20 and is statistically unconvincing. It is a hypothesis for a future model only."
+  },
+  "scientific_conclusion": "NIST20 falsifies the claim that the current CASMI-2016-frozen consensus/gate reliably improves MRR across a third domain. There is nevertheless evidence of rank-redistribution signal: some moderate/hard queries move upward, while easy/high-value queries are sometimes damaged. The next model should explicitly protect high-confidence static hits and reconsider the energy-spread term, then be validated on a new untouched domain."
+}

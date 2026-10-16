@@ -1,0 +1,4 @@
+CASMI 2022 one-shot lockbox trigger
+Frozen model SHA256: 5f5649d8e771babfbb817e780873d1b691b714ecc814c11cae46a9a5e2a871eb
+Protocol frozen before outcome inspection.
+Infrastructure retry 4: all prior attempts ended before CFM download/ranking during the pre-ranking identity audit. This retry replaces only the audit data-loading path: it streams MassFormer all_smiles.txt, the official mol_id/SMILES export written from processed mol_df, and retains only the predeclared 71 CASMI-2016 training truths and 169 CASMI-2022 positive-ion truths. Frozen scorer, model hash, candidate coverage rule, inference, negative control, and replication gate are unchanged.

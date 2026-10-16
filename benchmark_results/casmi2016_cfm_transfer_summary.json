@@ -1,0 +1,430 @@
+{
+  "protocol": {
+    "dataset": "CASMI 2016 processed candidate lists from MassFormer release",
+    "candidate_spectra": "published CFM predictions only; no measured candidate reference spectra",
+    "ion_scope": "[M+H]+ only, because the main published CFM CASMI prediction table is positive [M+H]+",
+    "cfm_energies_ev": [
+      10,
+      20,
+      40
+    ],
+    "spectrum_preprocessing": "0.1% relative-intensity floor, top 128 peaks, precursor filter; sqrt/L2 for cosine and linear then L1 for convex geometry",
+    "mass_tolerance_da": 0.01,
+    "baseline": "static_best",
+    "primary_method_frozen_from_msnlib": "hybrid_static_convex_100",
+    "hybrid_definition": "within-query z(static_best) + 1.0 * z(convex_hull)",
+    "primary_min_candidate_prediction_coverage": 0.95,
+    "scored_min_candidate_prediction_coverage": 0.9,
+    "primary_estimand": "paired reranking improvement on the identical CFM-supported candidate intersection for CASMI queries retaining >=95% of the original candidate pool",
+    "absolute_rank_sensitivity": "also report worst-case bounds with every unsupported candidate inserted above the truth",
+    "negative_control": "same static z-scores plus a seeded permutation of the convex component across candidate identities",
+    "candidate_order_invariance": "asserted per query by reversing candidate order before tie-aware scoring",
+    "no_external_weight_tuning": true,
+    "coverage_threshold_chosen_before_external_ranking_outcomes": true
+  },
+  "coverage": {
+    "positive_mh_query_spectra": 124,
+    "complete_cfm_molecules": 221263,
+    "scored_queries_ge_90pct": 92,
+    "primary_queries_ge_95pct": 71,
+    "excluded": {
+      "no_candidate_list": 0,
+      "truth_not_predicted": 0,
+      "coverage_below_90pct": 32
+    },
+    "candidate_coverage_fraction": {
+      "min": 0.12149532710280374,
+      "median": 0.9616300892323506,
+      "mean": 0.9013061141671276,
+      "max": 1.0
+    }
+  },
+  "primary_ge_95pct": {
+    "metrics": {
+      "n_queries": 71,
+      "n_truth_molecule_blocks": 71,
+      "candidate_count_supported": {
+        "min": 37,
+        "median": 1110.0,
+        "max": 8447,
+        "mean": 1789.5633802816901
+      },
+      "candidate_coverage_fraction": {
+        "min": 0.9522968197879859,
+        "median": 0.9817459149124098,
+        "mean": 0.9795877385571896,
+        "max": 1.0
+      },
+      "mrr25_tieaware_static_best": 0.197609369831398,
+      "top1_tieaware_static_best": 0.08591549295774648,
+      "top5_tieaware_static_best": 0.31690140845070425,
+      "median_expected_rank_static_best": 18.5,
+      "pessimistic_mrr25_missing_above_truth_static_best": 0.028589670010880232,
+      "pessimistic_top1_missing_above_truth_static_best": 0.0,
+      "pessimistic_top5_missing_above_truth_static_best": 0.0528169014084507,
+      "mrr25_tieaware_convex_hull": 0.1897161579343858,
+      "top1_tieaware_convex_hull": 0.08708920187793427,
+      "top5_tieaware_convex_hull": 0.31338028169014087,
+      "median_expected_rank_convex_hull": 20.5,
+      "pessimistic_mrr25_missing_above_truth_convex_hull": 0.026846014071867406,
+      "pessimistic_top1_missing_above_truth_convex_hull": 0.0,
+      "pessimistic_top5_missing_above_truth_convex_hull": 0.03873239436619718,
+      "mrr25_tieaware_hybrid_static_convex_100": 0.19549334901863982,
+      "top1_tieaware_hybrid_static_convex_100": 0.08708920187793427,
+      "top5_tieaware_hybrid_static_convex_100": 0.34507042253521125,
+      "median_expected_rank_hybrid_static_convex_100": 16.5,
+      "pessimistic_mrr25_missing_above_truth_hybrid_static_convex_100": 0.028227859755304546,
+      "pessimistic_top1_missing_above_truth_hybrid_static_convex_100": 0.0,
+      "pessimistic_top5_missing_above_truth_hybrid_static_convex_100": 0.03873239436619718,
+      "mrr25_tieaware_hybrid_permuted_convex_control": 0.15531000266855327,
+      "top1_tieaware_hybrid_permuted_convex_control": 0.07042253521126761,
+      "top5_tieaware_hybrid_permuted_convex_control": 0.2112676056338028,
+      "median_expected_rank_hybrid_permuted_convex_control": 21.0,
+      "pessimistic_mrr25_missing_above_truth_hybrid_permuted_convex_control": 0.026612382440169526,
+      "pessimistic_top1_missing_above_truth_hybrid_permuted_convex_control": 0.0,
+      "pessimistic_top5_missing_above_truth_hybrid_permuted_convex_control": 0.028169014084507043
+    },
+    "paired_inference": {
+      "primary_vs_static": {
+        "bootstrap": {
+          "delta": -0.002116020812758163,
+          "ci_low": -0.04357782144060423,
+          "ci_high": 0.03422391851197354,
+          "n": 71,
+          "n_blocks": 71,
+          "seed": 315159,
+          "n_boot": 10000,
+          "resampling_unit": "block"
+        },
+        "signflip": {
+          "delta": -0.002116020812758163,
+          "p_value_two_sided": 0.9195004024979875,
+          "n": 71,
+          "n_blocks": 71,
+          "mode": "monte_carlo",
+          "n_permutations": 200000,
+          "seed": 315160,
+          "extreme": 183900
+        }
+      },
+      "convex_vs_static": {
+        "bootstrap": {
+          "delta": -0.007893211897012215,
+          "ci_low": -0.058083825301728655,
+          "ci_high": 0.039341936382025024,
+          "n": 71,
+          "n_blocks": 71,
+          "seed": 316159,
+          "n_boot": 10000,
+          "resampling_unit": "block"
+        },
+        "signflip": {
+          "delta": -0.007893211897012215,
+          "p_value_two_sided": 0.7557912210438947,
+          "n": 71,
+          "n_blocks": 71,
+          "mode": "monte_carlo",
+          "n_permutations": 200000,
+          "seed": 316160,
+          "extreme": 151158
+        }
+      },
+      "permuted_control_vs_static": {
+        "bootstrap": {
+          "delta": -0.04229936716284472,
+          "ci_low": -0.1123625565517673,
+          "ci_high": 0.0306210888446602,
+          "n": 71,
+          "n_blocks": 71,
+          "seed": 317159,
+          "n_boot": 10000,
+          "resampling_unit": "block"
+        },
+        "signflip": {
+          "delta": -0.04229936716284472,
+          "p_value_two_sided": 0.24915875420622896,
+          "n": 71,
+          "n_blocks": 71,
+          "mode": "monte_carlo",
+          "n_permutations": 200000,
+          "seed": 317160,
+          "extreme": 49831
+        }
+      }
+    }
+  },
+  "coverage_strata_sensitivity": {
+    "coverage_ge_0.90": {
+      "metrics": {
+        "n_queries": 92,
+        "n_truth_molecule_blocks": 92,
+        "candidate_count_supported": {
+          "min": 37,
+          "median": 1097.0,
+          "max": 8447,
+          "mean": 1733.7717391304348
+        },
+        "candidate_coverage_fraction": {
+          "min": 0.9047619047619048,
+          "median": 0.9730612244897959,
+          "mean": 0.9680273309928581,
+          "max": 1.0
+        },
+        "mrr25_tieaware_static_best": 0.21048618373663516,
+        "top1_tieaware_static_best": 0.09415760869565219,
+        "top5_tieaware_static_best": 0.3340126811594203,
+        "median_expected_rank_static_best": 17.0,
+        "pessimistic_mrr25_missing_above_truth_static_best": 0.022063767073614092,
+        "pessimistic_top1_missing_above_truth_static_best": 0.0,
+        "pessimistic_top5_missing_above_truth_static_best": 0.04076086956521739,
+        "mrr25_tieaware_convex_hull": 0.19966421894982142,
+        "top1_tieaware_convex_hull": 0.08691123188405797,
+        "top5_tieaware_convex_hull": 0.3394474637681159,
+        "median_expected_rank_convex_hull": 16.25,
+        "pessimistic_mrr25_missing_above_truth_convex_hull": 0.020718119555462888,
+        "pessimistic_top1_missing_above_truth_convex_hull": 0.0,
+        "pessimistic_top5_missing_above_truth_convex_hull": 0.029891304347826088,
+        "mrr25_tieaware_hybrid_static_convex_100": 0.2122793348285621,
+        "top1_tieaware_hybrid_static_convex_100": 0.09506340579710146,
+        "top5_tieaware_hybrid_static_convex_100": 0.3666213768115942,
+        "median_expected_rank_hybrid_static_convex_100": 14.75,
+        "pessimistic_mrr25_missing_above_truth_hybrid_static_convex_100": 0.021784543941593727,
+        "pessimistic_top1_missing_above_truth_hybrid_static_convex_100": 0.0,
+        "pessimistic_top5_missing_above_truth_hybrid_static_convex_100": 0.029891304347826088,
+        "mrr25_tieaware_hybrid_permuted_convex_control": 0.16206780957373706,
+        "top1_tieaware_hybrid_permuted_convex_control": 0.06521739130434782,
+        "top5_tieaware_hybrid_permuted_convex_control": 0.25,
+        "median_expected_rank_hybrid_permuted_convex_control": 20.0,
+        "pessimistic_mrr25_missing_above_truth_hybrid_permuted_convex_control": 0.02053781688317431,
+        "pessimistic_top1_missing_above_truth_hybrid_permuted_convex_control": 0.0,
+        "pessimistic_top5_missing_above_truth_hybrid_permuted_convex_control": 0.021739130434782608
+      },
+      "primary_vs_static_inference": {
+        "bootstrap": {
+          "delta": 0.001793151091926951,
+          "ci_low": -0.03155246969084744,
+          "ci_high": 0.031997688172610984,
+          "n": 92,
+          "n_blocks": 92,
+          "seed": 323159,
+          "n_boot": 10000,
+          "resampling_unit": "block"
+        },
+        "signflip": {
+          "delta": 0.001793151091926951,
+          "p_value_two_sided": 0.9131904340478297,
+          "n": 92,
+          "n_blocks": 92,
+          "mode": "monte_carlo",
+          "n_permutations": 200000,
+          "seed": 323160,
+          "extreme": 182638
+        }
+      }
+    },
+    "coverage_ge_0.95": {
+      "metrics": {
+        "n_queries": 71,
+        "n_truth_molecule_blocks": 71,
+        "candidate_count_supported": {
+          "min": 37,
+          "median": 1110.0,
+          "max": 8447,
+          "mean": 1789.5633802816901
+        },
+        "candidate_coverage_fraction": {
+          "min": 0.9522968197879859,
+          "median": 0.9817459149124098,
+          "mean": 0.9795877385571896,
+          "max": 1.0
+        },
+        "mrr25_tieaware_static_best": 0.197609369831398,
+        "top1_tieaware_static_best": 0.08591549295774648,
+        "top5_tieaware_static_best": 0.31690140845070425,
+        "median_expected_rank_static_best": 18.5,
+        "pessimistic_mrr25_missing_above_truth_static_best": 0.028589670010880232,
+        "pessimistic_top1_missing_above_truth_static_best": 0.0,
+        "pessimistic_top5_missing_above_truth_static_best": 0.0528169014084507,
+        "mrr25_tieaware_convex_hull": 0.1897161579343858,
+        "top1_tieaware_convex_hull": 0.08708920187793427,
+        "top5_tieaware_convex_hull": 0.31338028169014087,
+        "median_expected_rank_convex_hull": 20.5,
+        "pessimistic_mrr25_missing_above_truth_convex_hull": 0.026846014071867406,
+        "pessimistic_top1_missing_above_truth_convex_hull": 0.0,
+        "pessimistic_top5_missing_above_truth_convex_hull": 0.03873239436619718,
+        "mrr25_tieaware_hybrid_static_convex_100": 0.19549334901863982,
+        "top1_tieaware_hybrid_static_convex_100": 0.08708920187793427,
+        "top5_tieaware_hybrid_static_convex_100": 0.34507042253521125,
+        "median_expected_rank_hybrid_static_convex_100": 16.5,
+        "pessimistic_mrr25_missing_above_truth_hybrid_static_convex_100": 0.028227859755304546,
+        "pessimistic_top1_missing_above_truth_hybrid_static_convex_100": 0.0,
+        "pessimistic_top5_missing_above_truth_hybrid_static_convex_100": 0.03873239436619718,
+        "mrr25_tieaware_hybrid_permuted_convex_control": 0.15531000266855327,
+        "top1_tieaware_hybrid_permuted_convex_control": 0.07042253521126761,
+        "top5_tieaware_hybrid_permuted_convex_control": 0.2112676056338028,
+        "median_expected_rank_hybrid_permuted_convex_control": 21.0,
+        "pessimistic_mrr25_missing_above_truth_hybrid_permuted_convex_control": 0.026612382440169526,
+        "pessimistic_top1_missing_above_truth_hybrid_permuted_convex_control": 0.0,
+        "pessimistic_top5_missing_above_truth_hybrid_permuted_convex_control": 0.028169014084507043
+      },
+      "primary_vs_static_inference": {
+        "bootstrap": {
+          "delta": -0.002116020812758163,
+          "ci_low": -0.04226890752519149,
+          "ci_high": 0.0359485269018241,
+          "n": 71,
+          "n_blocks": 71,
+          "seed": 323659,
+          "n_boot": 10000,
+          "resampling_unit": "block"
+        },
+        "signflip": {
+          "delta": -0.002116020812758163,
+          "p_value_two_sided": 0.9193304033479832,
+          "n": 71,
+          "n_blocks": 71,
+          "mode": "monte_carlo",
+          "n_permutations": 200000,
+          "seed": 323660,
+          "extreme": 183866
+        }
+      }
+    },
+    "coverage_ge_0.99": {
+      "metrics": {
+        "n_queries": 21,
+        "n_truth_molecule_blocks": 21,
+        "candidate_count_supported": {
+          "min": 40,
+          "median": 805.0,
+          "max": 8447,
+          "mean": 1849.952380952381
+        },
+        "candidate_coverage_fraction": {
+          "min": 0.9901754385964913,
+          "median": 0.9943734015345268,
+          "mean": 0.9958298880796067,
+          "max": 1.0
+        },
+        "mrr25_tieaware_static_best": 0.19230726123588074,
+        "top1_tieaware_static_best": 0.09523809523809523,
+        "top5_tieaware_static_best": 0.30952380952380953,
+        "median_expected_rank_static_best": 18.0,
+        "pessimistic_mrr25_missing_above_truth_static_best": 0.07751181563235676,
+        "pessimistic_top1_missing_above_truth_static_best": 0.0,
+        "pessimistic_top5_missing_above_truth_static_best": 0.17857142857142858,
+        "mrr25_tieaware_convex_hull": 0.1651174573688579,
+        "top1_tieaware_convex_hull": 0.07142857142857142,
+        "top5_tieaware_convex_hull": 0.2857142857142857,
+        "median_expected_rank_convex_hull": 17.0,
+        "pessimistic_mrr25_missing_above_truth_convex_hull": 0.07320586418293923,
+        "pessimistic_top1_missing_above_truth_convex_hull": 0.0,
+        "pessimistic_top5_missing_above_truth_convex_hull": 0.13095238095238096,
+        "mrr25_tieaware_hybrid_static_convex_100": 0.18667674606750237,
+        "top1_tieaware_hybrid_static_convex_100": 0.09523809523809523,
+        "top5_tieaware_hybrid_static_convex_100": 0.3333333333333333,
+        "median_expected_rank_hybrid_static_convex_100": 16.5,
+        "pessimistic_mrr25_missing_above_truth_hybrid_static_convex_100": 0.07518264278626662,
+        "pessimistic_top1_missing_above_truth_hybrid_static_convex_100": 0.0,
+        "pessimistic_top5_missing_above_truth_hybrid_static_convex_100": 0.13095238095238096,
+        "mrr25_tieaware_hybrid_permuted_convex_control": 0.130415219700934,
+        "top1_tieaware_hybrid_permuted_convex_control": 0.047619047619047616,
+        "top5_tieaware_hybrid_permuted_convex_control": 0.14285714285714285,
+        "median_expected_rank_hybrid_permuted_convex_control": 13.0,
+        "pessimistic_mrr25_missing_above_truth_hybrid_permuted_convex_control": 0.06675590491379965,
+        "pessimistic_top1_missing_above_truth_hybrid_permuted_convex_control": 0.0,
+        "pessimistic_top5_missing_above_truth_hybrid_permuted_convex_control": 0.09523809523809523
+      },
+      "primary_vs_static_inference": {
+        "bootstrap": {
+          "delta": -0.005630515168378364,
+          "ci_low": -0.03258971672339651,
+          "ci_high": 0.013189220675948606,
+          "n": 21,
+          "n_blocks": 21,
+          "seed": 324059,
+          "n_boot": 10000,
+          "resampling_unit": "block"
+        },
+        "signflip": {
+          "delta": -0.005630515168378364,
+          "p_value_two_sided": 0.8909955450222748,
+          "n": 21,
+          "n_blocks": 21,
+          "mode": "monte_carlo",
+          "n_permutations": 200000,
+          "seed": 324060,
+          "extreme": 178199
+        }
+      }
+    },
+    "coverage_ge_1.00": {
+      "metrics": {
+        "n_queries": 5,
+        "n_truth_molecule_blocks": 5,
+        "candidate_count_supported": {
+          "min": 40,
+          "median": 217.0,
+          "max": 805,
+          "mean": 378.6
+        },
+        "candidate_coverage_fraction": {
+          "min": 1.0,
+          "median": 1.0,
+          "mean": 1.0,
+          "max": 1.0
+        },
+        "mrr25_tieaware_static_best": 0.0386439760789606,
+        "top1_tieaware_static_best": 0.0,
+        "top5_tieaware_static_best": 0.0,
+        "median_expected_rank_static_best": 18.0,
+        "pessimistic_mrr25_missing_above_truth_static_best": 0.0386439760789606,
+        "pessimistic_top1_missing_above_truth_static_best": 0.0,
+        "pessimistic_top5_missing_above_truth_static_best": 0.0,
+        "mrr25_tieaware_convex_hull": 0.04283233433233433,
+        "top1_tieaware_convex_hull": 0.0,
+        "top5_tieaware_convex_hull": 0.0,
+        "median_expected_rank_convex_hull": 21.5,
+        "pessimistic_mrr25_missing_above_truth_convex_hull": 0.04283233433233433,
+        "pessimistic_top1_missing_above_truth_convex_hull": 0.0,
+        "pessimistic_top5_missing_above_truth_convex_hull": 0.0,
+        "mrr25_tieaware_hybrid_static_convex_100": 0.03939555052790347,
+        "top1_tieaware_hybrid_static_convex_100": 0.0,
+        "top5_tieaware_hybrid_static_convex_100": 0.0,
+        "median_expected_rank_hybrid_static_convex_100": 16.5,
+        "pessimistic_mrr25_missing_above_truth_hybrid_static_convex_100": 0.03939555052790347,
+        "pessimistic_top1_missing_above_truth_hybrid_static_convex_100": 0.0,
+        "pessimistic_top5_missing_above_truth_hybrid_static_convex_100": 0.0,
+        "mrr25_tieaware_hybrid_permuted_convex_control": 0.04318181818181818,
+        "top1_tieaware_hybrid_permuted_convex_control": 0.0,
+        "top5_tieaware_hybrid_permuted_convex_control": 0.0,
+        "median_expected_rank_hybrid_permuted_convex_control": 29.0,
+        "pessimistic_mrr25_missing_above_truth_hybrid_permuted_convex_control": 0.04318181818181818,
+        "pessimistic_top1_missing_above_truth_hybrid_permuted_convex_control": 0.0,
+        "pessimistic_top5_missing_above_truth_hybrid_permuted_convex_control": 0.0
+      },
+      "primary_vs_static_inference": {
+        "bootstrap": {
+          "delta": 0.0007515744489428753,
+          "ci_low": -0.009406617032778017,
+          "ci_high": 0.009388093158990998,
+          "n": 5,
+          "n_blocks": 5,
+          "seed": 324159,
+          "n_boot": 10000,
+          "resampling_unit": "block"
+        },
+        "signflip": {
+          "delta": 0.0007515744489428753,
+          "p_value_two_sided": 1.0,
+          "n": 5,
+          "n_blocks": 5,
+          "mode": "exact",
+          "n_sign_assignments": 32,
+          "extreme": 32
+        }
+      }
+    }
+  },
+  "interpretation_guardrail": "A positive paired result establishes transfer of the frozen reranker from measured-library MSnLib ranking to structure-only CASMI candidates conditional on CFM prediction support. It is not full CASMI accuracy because some original candidates lack CFM predictions. Pessimistic missing-candidate rank bounds quantify that limitation. It still does not prove universal metabolite identification: candidate-generation recall, prediction-model error, negative/adduct coverage, and cross-instrument shift remain separate failure modes."
+}

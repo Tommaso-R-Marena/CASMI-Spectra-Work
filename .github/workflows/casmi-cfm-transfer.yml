@@ -1,0 +1,103 @@
+name: casmi-cfm-transfer
+
+on:
+  push:
+    branches: [casmi-external-generalization]
+    paths:
+      - 'src/qfd/**'
+      - 'scripts/run_casmi2016_cfm_transfer.py'
+      - 'tests/**'
+      - '.github/workflows/casmi-cfm-transfer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: casmi-cfm-transfer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install project
+        run: python -m pip install -e '.[dev]' pandas
+      - name: Run full test suite
+        run: PYTHONPATH=src pytest -q
+      - name: Download and verify CASMI 2016 benchmark
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/casmi2016 /tmp/cfm results/casmi_cfm_transfer
+          curl -L --fail --retry 3 --retry-delay 2 \
+            'https://zenodo.org/records/8399738/files/proc_casmi_2016.tgz?download=1' \
+            -o /tmp/proc_casmi_2016.tgz
+          echo 'c24bae2a10e929d8a1570ae810d45278  /tmp/proc_casmi_2016.tgz' | md5sum -c -
+          tar -xzf /tmp/proc_casmi_2016.tgz -C /tmp/casmi2016
+      - name: Download and verify CFM predictions
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 --retry-delay 3 \
+            'https://zenodo.org/records/8399738/files/cfm.tgz?download=1' \
+            -o /tmp/cfm.tgz
+          echo '9091cbc446124dc947cb2a7b01fe9c98  /tmp/cfm.tgz' | md5sum -c -
+          CFM_MEMBER="$(tar -tzf /tmp/cfm.tgz | grep -E '(^|/)casmi_spec_df\.pkl$' | head -n1)"
+          test -n "$CFM_MEMBER"
+          tar -xzf /tmp/cfm.tgz -C /tmp/cfm "$CFM_MEMBER"
+      - name: Run frozen external transfer benchmark
+        shell: bash
+        run: |
+          set -o pipefail
+          PYTHONPATH=src python scripts/run_casmi2016_cfm_transfer.py \
+            /tmp/casmi2016 /tmp/cfm \
+            --out-dir results/casmi_cfm_transfer \
+            --seed 314159 2>&1 | tee results/casmi_cfm_transfer/run.log
+      - name: Show compact result
+        if: always()
+        run: |
+          if [ -f results/casmi_cfm_transfer/summary.json ]; then
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('results/casmi_cfm_transfer/summary.json')
+          d = json.loads(p.read_text())
+          print(json.dumps({
+              'protocol': d.get('protocol'),
+              'coverage': d.get('coverage'),
+              'primary': d.get('primary_coverage_ge_95'),
+              'strata': d.get('coverage_strata'),
+              'paired_inference': d.get('primary_paired_inference'),
+          }, indent=2))
+          PY
+          fi
+      - name: Persist compact benchmark result
+        if: success()
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p benchmark_results
+          cp results/casmi_cfm_transfer/summary.json benchmark_results/casmi2016_cfm_transfer_summary.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add benchmark_results/casmi2016_cfm_transfer_summary.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record frozen CASMI 2016 CFM transfer result'
+            git pull --rebase origin casmi-external-generalization
+            git push origin HEAD:casmi-external-generalization
+          fi
+      - name: Upload transfer results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casmi2016-cfm-transfer
+          path: results/casmi_cfm_transfer/
+          if-no-files-found: ignore

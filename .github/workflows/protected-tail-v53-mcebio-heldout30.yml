@@ -1,0 +1,168 @@
+name: protected-tail-v53-mcebio-heldout30
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v53-independent-msnlib-lockboxes]
+    paths:
+      - '.github/workflows/protected-tail-v53-mcebio-heldout30.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protected-tail-v53-mcebio-heldout30-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FROZEN_SELECTOR_SHA: 0006c7f81c7dfac53da48690ca0fe627108b9767
+  DATASET_FILE: 20241003_mcebio_pos_ms2.json
+  DATASET_MD5: 806f33c9c60af74a0aa21fb66aeb84f3
+
+jobs:
+  heldout30:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify frozen replication protocol
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin "$FROZEN_SELECTOR_SHA"
+          git diff --exit-code "$FROZEN_SELECTOR_SHA" -- src/qfd/protected_tail_v52.py src/qfd/protected_tail_v53.py
+          python -m pip install -e '.[dev]'
+          python -m pip install pandas
+          PYTHONPATH=src:. pytest -q
+
+      - name: Download and verify pinned MCEBIO library
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p results/protected_tail_v53/mcebio_heldout30
+          curl -L --fail --retry 4 --retry-delay 3 \
+            "https://zenodo.org/records/21105617/files/${DATASET_FILE}?download=1" \
+            -o /tmp/mcebio.jsonl
+          echo "${DATASET_MD5}  /tmp/mcebio.jsonl" | md5sum -c -
+          sha256sum /tmp/mcebio.jsonl | tee results/protected_tail_v53/mcebio_heldout30/input_sha256.txt
+
+      - name: Label-free heldout-energy feasibility audit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_msnlib_heldout30_feasibility.py \
+            /tmp/mcebio.jsonl \
+            --dataset mcebio \
+            --out results/protected_tail_v53/mcebio_heldout30/feasibility.json
+
+      - name: Enforce unchanged ENAMDISC replication gate before opening scores
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('results/protected_tail_v53/mcebio_heldout30/feasibility.json')
+          d = json.loads(p.read_text())
+          print(json.dumps({'validation': d['coverage']['validation'], 'predeclared_gate': d['predeclared_gate'], 'gate_pass': d['gate_pass']}, indent=2))
+          if not d['gate_pass']:
+              raise SystemExit('UNCHANGED HELDOUT30 REPLICATION GATE FAILED. MCEBIO rankings remain unopened.')
+          print('UNCHANGED HELDOUT30 REPLICATION GATE PASSED. Frozen MCEBIO validation may now be opened.')
+          PY
+
+      - name: Export frozen heldout-energy candidate scores
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/export_msnlib_heldout30_candidates.py \
+            /tmp/mcebio.jsonl \
+            --out results/protected_tail_v53/mcebio_heldout30/candidate_features.csv.gz \
+            --summary results/protected_tail_v53/mcebio_heldout30/candidate_export_summary.json
+
+      - name: Verify label-free cohort and freeze validation table
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          import pandas as pd
+          from pathlib import Path
+          root = Path('results/protected_tail_v53/mcebio_heldout30')
+          f = json.loads((root / 'feasibility.json').read_text())
+          e = json.loads((root / 'candidate_export_summary.json').read_text())
+          assert f['input']['sha256'] == e['input']['sha256']
+          assert f['coverage']['all']['queries'] == e['queries']
+          assert f['coverage']['validation']['queries'] == e['split']['validation_queries']
+          assert f['coverage']['validation']['formula_blocks'] == e['split']['validation_formula_blocks']
+          df = pd.read_csv(root / 'candidate_features.csv.gz')
+          val = df.loc[df['split'].eq('validation')].copy()
+          assert val['spec_id'].nunique() == f['coverage']['validation']['queries']
+          assert val['formula'].nunique() == f['coverage']['validation']['formula_blocks']
+          out = root / 'candidate_features_validation.csv.gz'
+          val.to_csv(out, index=False, compression='gzip')
+          print(json.dumps({'validation_queries': int(val['spec_id'].nunique()), 'validation_formula_blocks': int(val['formula'].nunique()), 'validation_candidate_rows': int(len(val)), 'validation_sha256': hashlib.sha256(out.read_bytes()).hexdigest()}, indent=2))
+          PY
+
+      - name: Open independent replication rankings with unchanged evaluator
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/analyze_msnlib_heldout30_lockbox.py \
+            results/protected_tail_v53/mcebio_heldout30/candidate_features_validation.csv.gz \
+            --out results/protected_tail_v53/mcebio_heldout30/validation_result.json \
+            --split validation \
+            --seed 20260922 \
+            --overlap-threshold 0.8 \
+            --protected-k 1 \
+            --overlap-k 10 \
+            --head-survival-slack 1
+
+      - name: Record immutable replication provenance
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results/protected_tail_v53/mcebio_heldout30
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path('results/protected_tail_v53/mcebio_heldout30')
+          inp = Path('/tmp/mcebio.jsonl')
+          val = root / 'candidate_features_validation.csv.gz'
+          provenance = {
+              'dataset': 'MCEBIO positive-mode MS2',
+              'zenodo_record': '21105617',
+              'filename': os.environ['DATASET_FILE'],
+              'expected_md5': os.environ['DATASET_MD5'],
+              'input_sha256': hashlib.sha256(inp.read_bytes()).hexdigest() if inp.exists() else None,
+              'validation_table_sha256': hashlib.sha256(val.read_bytes()).hexdigest() if val.exists() else None,
+              'frozen_selector_sha': os.environ['FROZEN_SELECTOR_SHA'],
+              'workflow_git_sha': os.environ.get('GITHUB_SHA'),
+              'replication_of': 'ENAMDISC prospective heldout30 protocol, unchanged',
+              'query_energy_ev': 30.0,
+              'reference_energies_ev': [20.0, 60.0],
+              'interpolation_weight_low': 0.75,
+              'interpolation_weight_high': 0.25,
+              'split_unit': 'molecular formula',
+              'split_salt': 'msnlib-heldout30-formula-v1',
+              'validation_fraction': 0.5,
+              'unchanged_validation_gate': {'validation_queries_min': 300, 'validation_formula_blocks_min': 100, 'validation_queries_pool_ge_5_min': 100},
+              'primary_endpoint': 'formula-blocked query-weighted delta tie-aware MRR@25, v5.3 minus static, validation formulas only',
+              'secondary_endpoint_of_interest': 'interpolation minus static',
+              'no_retuning_on_replication': True,
+          }
+          (root / 'provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
+          PY
+
+      - name: Upload heldout-energy replication artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: protected-tail-v53-mcebio-heldout30
+          path: results/protected_tail_v53/mcebio_heldout30/
+          if-no-files-found: warn
+          retention-days: 90

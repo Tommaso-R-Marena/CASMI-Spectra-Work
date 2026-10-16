@@ -1,0 +1,193 @@
+name: energy-geometry-power-transfer-matrix
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v53-independent-msnlib-lockboxes]
+    paths:
+      - '.github/workflows/energy-geometry-power-transfer-matrix.yml'
+
+permissions:
+  contents: read
+
+env:
+  FROZEN_TRANSFER_SHA: be7813155a5dada31c8c557952a060b664a1e3ac
+
+jobs:
+  transfer:
+    name: ${{ matrix.dataset }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dataset: mcebio_neg
+            file: 20241003_mcebio_neg_ms2.json
+            md5: f0b8490cd619c9ea7fdea8de95393c28
+            status: independent_polarity_transfer
+          - dataset: mcedrug_pos
+            file: 20241003_mcedrug_pos_ms2.json
+            md5: c29a4b4c66abaaae0f30296dd486c224
+            status: independent_library_transfer
+          - dataset: mcedrug_neg
+            file: 20241003_mcedrug_neg_ms2.json
+            md5: 863fe98f5343209205805f9e7c0f92a2
+            status: independent_library_polarity_transfer
+          - dataset: mcescaf_pos
+            file: 20241003_mcescaf_pos_ms2.json
+            md5: 3ba52914a2f27239c5278c7d96888ecf
+            status: independent_library_transfer
+          - dataset: mcescaf_neg
+            file: 20241003_mcescaf_neg_ms2.json
+            md5: dee26d6f05fb92cbccc99a5a343d9cfb
+            status: independent_library_polarity_transfer
+          - dataset: enammol_pos
+            file: 20241003_enammol_pos_ms2.json
+            md5: ed6db189b4b5e1fc6a8cf3df211dbbe8
+            status: independent_library_transfer
+          - dataset: enammol_neg
+            file: 20241003_enammol_neg_ms2.json
+            md5: 88c934bd431582a346e486c8c14b76af
+            status: independent_library_polarity_transfer
+          - dataset: enamdisc_neg
+            file: 20241003_enamdisc_neg_ms2.json
+            md5: ad9c6e971a1902c091aeb4d555ca8db6
+            status: independent_polarity_transfer
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify frozen transfer implementation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin "$FROZEN_TRANSFER_SHA"
+          git diff --exit-code "$FROZEN_TRANSFER_SHA" -- \
+            docs/ENERGY_GEOMETRY_POWER_TRANSFER_PROTOCOL.md \
+            scripts/benchmark_msnlib_energy_geometry_transfer.py \
+            src/qfd/power_geometry.py \
+            src/qfd/energy_geometry_controls.py \
+            src/qfd/energy_interpolation.py \
+            scripts/audit_msnlib_energy_geometry_loeo.py
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Download and verify pinned dataset
+        shell: bash
+        env:
+          DATASET_FILE: ${{ matrix.file }}
+          DATASET_MD5: ${{ matrix.md5 }}
+        run: |
+          set -euxo pipefail
+          mkdir -p "results/energy_geometry_power_transfer/${{ matrix.dataset }}"
+          curl -L --fail --retry 4 --retry-delay 3 \
+            "https://zenodo.org/records/21105617/files/${DATASET_FILE}?download=1" \
+            -o /tmp/msnlib.jsonl
+          echo "${DATASET_MD5}  /tmp/msnlib.jsonl" | md5sum -c -
+          sha256sum /tmp/msnlib.jsonl | tee "results/energy_geometry_power_transfer/${{ matrix.dataset }}/input_sha256.txt"
+      - name: Label-free feasibility audit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_msnlib_energy_geometry_loeo.py \
+            /tmp/msnlib.jsonl \
+            --dataset "${{ matrix.dataset }}" \
+            --out "results/energy_geometry_power_transfer/${{ matrix.dataset }}/feasibility.json"
+      - name: Enforce frozen gate without opening failed cohorts
+        id: gate
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=Path('results/energy_geometry_power_transfer/${{ matrix.dataset }}/feasibility.json')
+          d=json.loads(p.read_text())
+          passed=bool(d['gate_pass'])
+          print(json.dumps({'coverage':d['coverage'],'gate':d['predeclared_gate'],'gate_pass':passed},indent=2))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write(f"pass={'true' if passed else 'false'}\n")
+          if not passed:
+              print('FROZEN GATE FAILED: transfer scores remain unopened for this dataset.')
+          PY
+      - name: Open frozen alpha-quarter transfer outcomes
+        if: steps.gate.outputs.pass == 'true'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/benchmark_msnlib_energy_geometry_transfer.py \
+            /tmp/msnlib.jsonl \
+            --dataset "${{ matrix.dataset }}" \
+            --seed 20260922 \
+            --out "results/energy_geometry_power_transfer/${{ matrix.dataset }}/result.json"
+      - name: Record immutable provenance
+        if: always()
+        shell: bash
+        env:
+          DATASET_FILE: ${{ matrix.file }}
+          DATASET_MD5: ${{ matrix.md5 }}
+        run: |
+          mkdir -p "results/energy_geometry_power_transfer/${{ matrix.dataset }}"
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path('results/energy_geometry_power_transfer/${{ matrix.dataset }}')
+          inp=Path('/tmp/msnlib.jsonl')
+          p={
+            'dataset':'${{ matrix.dataset }}',
+            'transfer_status':'${{ matrix.status }}',
+            'zenodo_record':'21105617',
+            'filename':os.environ['DATASET_FILE'],
+            'expected_md5':os.environ['DATASET_MD5'],
+            'input_sha256':hashlib.sha256(inp.read_bytes()).hexdigest() if inp.exists() else None,
+            'frozen_transfer_sha':os.environ['FROZEN_TRANSFER_SHA'],
+            'workflow_git_sha':os.environ.get('GITHUB_SHA'),
+            'alpha':0.25,
+            'no_dataset_specific_retuning':True,
+          }
+          (root/'provenance.json').write_text(json.dumps(p,indent=2)+'\n')
+          PY
+      - name: Upload transfer artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: energy-geometry-power-transfer-${{ matrix.dataset }}
+          path: results/energy_geometry_power_transfer/${{ matrix.dataset }}/
+          if-no-files-found: warn
+          retention-days: 90
+
+  transfer-verdict:
+    name: Predeclared cross-cohort verdict
+    if: always()
+    needs: [transfer]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect all available matrix artifacts
+        run: mkdir -p collected results/power_transfer_verdict
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: energy-geometry-power-transfer-*
+          path: collected
+          merge-multiple: false
+      - name: Audit provenance and report without imputing missing results
+        run: |
+          python scripts/summarize_power_transfer.py \
+            --root collected \
+            --out results/power_transfer_verdict
+          cat results/power_transfer_verdict/verdict.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve machine-readable cross-cohort verdict
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: energy-geometry-power-transfer-verdict
+          path: results/power_transfer_verdict/
+          if-no-files-found: warn
+          retention-days: 90

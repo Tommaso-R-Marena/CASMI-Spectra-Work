@@ -1,0 +1,286 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Iterable, Sequence
+
+import numpy as np
+from scipy.optimize import minimize
+from scipy.special import logsumexp
+
+
+CONSENSUS_FEATURE_NAMES = (
+    "z_static_best",
+    "z_ordered_path",
+    "z_neg_energy_spread",
+)
+
+
+@dataclass(frozen=True)
+class ConditionalRankerFit:
+    weights: np.ndarray
+    l2: float
+    success: bool
+    objective: float
+
+
+def conditional_softmax_fit(
+    groups: Sequence[tuple[np.ndarray, int]],
+    *,
+    l2: float = 1.0,
+    initial: np.ndarray | None = None,
+    maxiter: int = 500,
+) -> ConditionalRankerFit:
+    """Fit one shared linear score using a query-conditional softmax loss.
+
+    Each group contains a candidate feature matrix X_q and the row index of the
+    true candidate. The loss is
+
+        sum_q [logsumexp(X_q w) - x_truth^T w] + (l2/2)||w||^2.
+
+    Treating each query as one likelihood term prevents large candidate pools
+    from receiving disproportionate weight merely because they contain more
+    decoys.
+    """
+    if not groups:
+        raise ValueError("at least one query group is required")
+    p = int(np.asarray(groups[0][0]).shape[1])
+    w0 = np.zeros(p, dtype=float) if initial is None else np.asarray(initial, dtype=float).copy()
+    if w0.shape != (p,):
+        raise ValueError("initial weight shape mismatch")
+    checked: list[tuple[np.ndarray, int]] = []
+    for X, y in groups:
+        X = np.asarray(X, dtype=float)
+        if X.ndim != 2 or X.shape[1] != p or X.shape[0] < 1:
+            raise ValueError("invalid feature matrix")
+        if not np.all(np.isfinite(X)):
+            raise ValueError("features must be finite")
+        y = int(y)
+        if not 0 <= y < X.shape[0]:
+            raise ValueError("truth index out of range")
+        checked.append((X, y))
+
+    def objective_gradient(w: np.ndarray):
+        loss = 0.0
+        grad = np.zeros_like(w)
+        for X, y in checked:
+            s = X @ w
+            z = logsumexp(s)
+            loss += float(z - s[y])
+            prob = np.exp(s - z)
+            grad += prob @ X - X[y]
+        loss += 0.5 * float(l2) * float(w @ w)
+        grad += float(l2) * w
+        return loss, grad
+
+    result = minimize(
+        lambda w: objective_gradient(w),
+        w0,
+        jac=True,
+        method="L-BFGS-B",
+        options={"maxiter": int(maxiter), "ftol": 1e-11},
+    )
+    return ConditionalRankerFit(
+        weights=np.asarray(result.x, dtype=float),
+        l2=float(l2),
+        success=bool(result.success),
+        objective=float(result.fun),
+    )
+
+
+def standardize_within_query(values: Iterable[float]) -> np.ndarray:
+    x = np.asarray(list(values), dtype=float)
+    if x.ndim != 1 or not np.all(np.isfinite(x)):
+        raise ValueError("finite one-dimensional values required")
+    sd = float(np.std(x))
+    if sd <= 1e-12:
+        return np.zeros_like(x)
+    return (x - float(np.mean(x))) / sd
+
+
+def consensus_feature_matrix(
+    cos10: Iterable[float],
+    cos20: Iterable[float],
+    cos40: Iterable[float],
+    ordered_path_score: Iterable[float],
+) -> np.ndarray:
+    """Build the frozen three-feature CASMI consensus representation.
+
+    Features are standardized within each query/candidate pool:
+      1. best individual-energy cosine,
+      2. ordered 10->20->40 path score,
+      3. negative across-energy cosine spread.
+
+    The third term rewards candidates whose predicted fragmentation agrees
+    coherently across energies instead of obtaining one isolated high match.
+    """
+    c10 = np.asarray(list(cos10), dtype=float)
+    c20 = np.asarray(list(cos20), dtype=float)
+    c40 = np.asarray(list(cos40), dtype=float)
+    path = np.asarray(list(ordered_path_score), dtype=float)
+    if not (c10.shape == c20.shape == c40.shape == path.shape) or c10.ndim != 1:
+        raise ValueError("aligned one-dimensional candidate vectors required")
+    if c10.size == 0 or not all(np.all(np.isfinite(x)) for x in (c10, c20, c40, path)):
+        raise ValueError("finite non-empty candidate vectors required")
+    C = np.column_stack([c10, c20, c40])
+    static = np.max(C, axis=1)
+    neg_spread = -np.std(C, axis=1)
+    return np.column_stack([
+        standardize_within_query(static),
+        standardize_within_query(path),
+        standardize_within_query(neg_spread),
+    ])
+
+
+def topk_overlap_fraction(a: Iterable[float], b: Iterable[float], *, k: int = 10) -> float:
+    """Fractional overlap between two descending top-k candidate sets."""
+    av = np.asarray(list(a), dtype=float)
+    bv = np.asarray(list(b), dtype=float)
+    if av.shape != bv.shape or av.ndim != 1 or av.size == 0:
+        raise ValueError("aligned non-empty score vectors required")
+    kk = min(int(k), int(av.size))
+    if kk < 1:
+        raise ValueError("k must be positive")
+    ia = set(np.argsort(-av, kind="stable")[:kk].tolist())
+    ib = set(np.argsort(-bv, kind="stable")[:kk].tolist())
+    return float(len(ia & ib) / kk)
+
+
+def _tie_aware_topk_membership(scores: Iterable[float], *, k: int) -> np.ndarray:
+    """Order-invariant fractional membership in a descending top-k set.
+
+    Candidates strictly above the kth score receive weight 1, candidates below
+    it receive 0, and candidates tied at the cutoff split the remaining top-k
+    capacity equally. The weights therefore sum exactly to min(k, n).
+    """
+    s = np.asarray(list(scores), dtype=float)
+    if s.ndim != 1 or s.size == 0 or not np.all(np.isfinite(s)):
+        raise ValueError("finite non-empty score vector required")
+    kk = min(int(k), int(s.size))
+    if kk < 1:
+        raise ValueError("k must be positive")
+    cutoff = float(np.sort(s)[-kk])
+    above = s > cutoff
+    tied = s == cutoff
+    remaining = kk - int(np.sum(above))
+    tied_count = int(np.sum(tied))
+    if not 0 < remaining <= tied_count:
+        raise RuntimeError("invalid tie-aware top-k cutoff accounting")
+    out = np.zeros(s.size, dtype=float)
+    out[above] = 1.0
+    out[tied] = float(remaining / tied_count)
+    return out
+
+
+def tie_aware_topk_overlap_fraction(
+    a: Iterable[float], b: Iterable[float], *, k: int = 10
+) -> float:
+    """Order-invariant expected top-k overlap under uniform cutoff tie breaks.
+
+    Each score vector is represented by fractional top-k membership. Their
+    fuzzy-set intersection, sum(min(w_a, w_b)), divided by k gives a value in
+    [0, 1]. When neither vector has a tie crossing the cutoff this is exactly
+    the ordinary |TopK(a) ∩ TopK(b)| / k overlap.
+    """
+    av = np.asarray(list(a), dtype=float)
+    bv = np.asarray(list(b), dtype=float)
+    if av.shape != bv.shape or av.ndim != 1 or av.size == 0:
+        raise ValueError("aligned non-empty score vectors required")
+    if not np.all(np.isfinite(av)) or not np.all(np.isfinite(bv)):
+        raise ValueError("finite score vectors required")
+    kk = min(int(k), int(av.size))
+    if kk < 1:
+        raise ValueError("k must be positive")
+    wa = _tie_aware_topk_membership(av, k=kk)
+    wb = _tie_aware_topk_membership(bv, k=kk)
+    return float(np.sum(np.minimum(wa, wb)) / kk)
+
+
+def selective_consensus_scores(
+    static_scores: Iterable[float],
+    expert_scores: Iterable[float],
+    *,
+    overlap_threshold: float,
+    k: int = 10,
+) -> tuple[np.ndarray, float, bool]:
+    """Use expert scores only when expert/static top-k sets sufficiently agree."""
+    static = np.asarray(list(static_scores), dtype=float)
+    expert = np.asarray(list(expert_scores), dtype=float)
+    if static.shape != expert.shape or static.ndim != 1 or static.size == 0:
+        raise ValueError("aligned non-empty score vectors required")
+    if not np.all(np.isfinite(static)) or not np.all(np.isfinite(expert)):
+        raise ValueError("finite score vectors required")
+    overlap = topk_overlap_fraction(static, expert, k=k)
+    use_expert = bool(overlap >= float(overlap_threshold))
+    return (expert.copy() if use_expert else static.copy()), float(overlap), use_expert
+
+
+def protected_tail_consensus_scores(
+    static_scores: Iterable[float],
+    expert_scores: Iterable[float],
+    *,
+    overlap_threshold: float,
+    protected_k: int = 1,
+    overlap_k: int = 10,
+) -> tuple[np.ndarray, float, bool, np.ndarray]:
+    """Safely rerank only the tail below a tie-closed static top-k prefix.
+
+    The protected-tail gate uses order-invariant, tie-aware fractional overlap
+    between static and expert top-``overlap_k`` memberships. If that overlap is
+    below ``overlap_threshold``, the static scores are returned unchanged.
+    Otherwise the static top ``protected_k`` prefix is frozen, including every
+    candidate tied at its cutoff, and only the remaining candidates are ordered
+    by the expert.
+
+    Returned scores are rank-surrogate scores rather than a numerical blend:
+    every protected candidate is above every tail candidate, static ordering
+    and ties are retained inside the protected prefix, and expert ordering and
+    ties are retained inside the tail. This avoids any dependence on relative
+    score scales.
+
+    With ``protected_k=1``, the full static maximum-score tie block is frozen,
+    so tie-aware Top-1 credit is exactly invariant for every possible truth.
+    More generally, using ``protected_k=k`` preserves tie-aware Top-k credit.
+    """
+    static = np.asarray(list(static_scores), dtype=float)
+    expert = np.asarray(list(expert_scores), dtype=float)
+    if static.shape != expert.shape or static.ndim != 1 or static.size == 0:
+        raise ValueError("aligned non-empty score vectors required")
+    if not np.all(np.isfinite(static)) or not np.all(np.isfinite(expert)):
+        raise ValueError("finite score vectors required")
+    pk = int(protected_k)
+    if pk < 1:
+        raise ValueError("protected_k must be positive")
+
+    overlap = tie_aware_topk_overlap_fraction(static, expert, k=overlap_k)
+    use_expert = bool(overlap >= float(overlap_threshold))
+
+    static_order = np.argsort(-static, kind="stable")
+    cutoff = static[static_order[min(pk, int(static.size)) - 1]]
+    protected = static >= cutoff
+    if not use_expert:
+        return static.copy(), float(overlap), False, protected
+
+    # Build lexicographic rank-surrogate scores. Protected score groups occupy
+    # strictly positive levels; the best tail expert group is zero and all
+    # lower tail groups are negative. Exact ties are retained in both regions.
+    out = np.empty_like(static)
+    protected_values = np.unique(static[protected])[::-1]
+    for group_rank, value in enumerate(protected_values):
+        out[protected & (static == value)] = float(len(protected_values) - group_rank + 1)
+
+    tail = ~protected
+    if np.any(tail):
+        expert_values = np.unique(expert[tail])[::-1]
+        for group_rank, value in enumerate(expert_values):
+            out[tail & (expert == value)] = -float(group_rank)
+
+    return out, float(overlap), True, protected
+
+
+def deterministic_fold(key: int, *, salt: str, n_folds: int) -> int:
+    import hashlib
+
+    if n_folds < 2:
+        raise ValueError("n_folds must be at least two")
+    digest = hashlib.sha256(f"{salt}:{int(key)}".encode("utf-8")).digest()
+    return int(int.from_bytes(digest[:8], "big") % int(n_folds))
