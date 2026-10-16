@@ -165,6 +165,29 @@ def analyze(rows,audit,prior=None,draws=3000):
         np.mean([r["alpha_quarter"]-r["hellinger_fixed"] for r in v])
         for v in contributors.values()]))
     out["n_contributors"]=len(contributors)
+    # Seven contributors are not seven interchangeable or randomized laboratories.
+    # Enumerate all 2^n group-wise flips rather than treating individual spectra
+    # as independent source-level replications. EXPLORATORY, not confirmatory.
+    from itertools import product
+    by_source=[np.asarray([r["alpha_quarter"]-r["hellinger_fixed"] for r in v])
+               for _,v in sorted(contributors.items())]
+    means=np.asarray([x.mean() for x in by_source])
+    counts=np.asarray([len(x) for x in by_source])
+    sign_patterns=np.asarray(list(product((-1.,1.),repeat=len(means))))
+    obs_macro=float(means.mean())
+    obs_query=float(np.dot(means,counts)/counts.sum())
+    flipped_macro=(sign_patterns*means).mean(axis=1)
+    flipped_query=(sign_patterns*(means*counts)).sum(axis=1)/counts.sum()
+    out["contributor_level_signflip_descriptive"]={
+        "n_sources":len(by_source),"assignments":len(sign_patterns),
+        "source_equal_weighted_mean":obs_macro,
+        "source_equal_weighted_two_sided_exact_p":float(np.mean(
+            np.abs(flipped_macro)>=abs(obs_macro)-1e-15)),
+        "query_weighted_mean":obs_query,
+        "query_weighted_source_flip_two_sided_exact_p":float(np.mean(
+            np.abs(flipped_query)>=abs(obs_query)-1e-15)),
+        "classification":"POSTHOC / source-level diagnostics, NOT a confirmatory sampling-based trial",
+    }
     out["scientific_limitations"]=(
         "All follow-up subgroups are post-hoc, correlated and exploratory. "
         "Exact full-InChIKey nonoverlap cannot establish independent acquisition "
