@@ -17,7 +17,6 @@ import numpy as np
 
 import audit_multims2_third_source_metadata as source
 from audit_multims2_third_source_metadata_v2 import NEW_EXACT_CID_ENERGY
-source.ENERGY=NEW_EXACT_CID_ENERGY
 
 from benchmark_multims2_third_source_geometry import (
     load_selected_source_spectra,score_one,summary
@@ -87,6 +86,9 @@ def scan_relevant_headers(mgf,original_manifest):
     return records
 
 def evaluate(mgf,metadata_dir,score_dir,out):
+    # Install the exact frozen v2 decoder only for the executed real-data audit.
+    # Never mutate source parser globals at import/test collection time.
+    source.ENERGY=NEW_EXACT_CID_ENERGY
     paths={
         "mgf":mgf,
         "manifest":metadata_dir/"frozen_triplets.jsonl",
