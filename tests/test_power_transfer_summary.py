@@ -1,6 +1,13 @@
+import importlib.util
 import json
+from pathlib import Path
 
-from scripts.summarize_power_transfer import COHORTS, PREFIX, holm_adjust, markdown, summarize
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "summarize_power_transfer.py"
+spec = importlib.util.spec_from_file_location("summarize_power_transfer", SCRIPT)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+COHORTS, PREFIX = module.COHORTS, module.PREFIX
+holm_adjust, markdown, summarize = module.holm_adjust, module.markdown, module.summarize
 
 
 def _write(root, dataset, *, gate=True, scores=True, good=True):
