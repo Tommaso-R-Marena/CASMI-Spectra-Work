@@ -1,0 +1,135 @@
+name: posthoc-massbank-robustness
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/massbank-robustness-nonoverlap-20261016]
+    paths:
+      - '.github/workflows/posthoc-massbank-robustness.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  posthoc-fixed-scores:
+    name: Exact structure-nonoverlap and cross-source sensitivity
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify frozen scorer, gate and tests remain unchanged
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin e440a0e2ed5e9b79b24986e7da0a49c6b60079e1
+          git fetch --depth=1 origin f027125817542bb24c29192290cda15492c3d3b5
+          git diff --exit-code e440a0e2ed5e9b79b24986e7da0a49c6b60079e1 -- \
+            docs/MASSBANK_EXTERNAL_ENERGY_GEOMETRY_SCORING_PROTOCOL.md \
+            scripts/benchmark_massbank_external_energy_geometry.py \
+            src/qfd/target_blind_geometry.py \
+            src/qfd/power_geometry.py \
+            src/qfd/stats.py
+          git diff --exit-code f027125817542bb24c29192290cda15492c3d3b5 -- \
+            docs/MASSBANK_EXTERNAL_ENERGY_GEOMETRY_GATE.md \
+            scripts/audit_massbank_external_energy_geometry.py
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Download original frozen efficacy and independent overlap audit artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/efficacy frozen/overlap
+          gh run download 38918658343 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name massbank-2026-03-frozen-external-efficacy \
+            --dir frozen/efficacy
+          gh run download 38920155068 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name posthoc-massbank-msnlib-structure-overlap \
+            --dir frozen/overlap
+          echo '2c973a7b83c1a48f95f923107ee72bb44a2a95f7d7da403f9d6f541d662efc8b  frozen/efficacy/rows.jsonl' | sha256sum -c -
+          echo 'd263e7028b032eb339bcb1bd4cb47c96ee50da9d233e78c74092d642f6ffb166  frozen/efficacy/result.json' | sha256sum -c -
+          echo '265dfb75e33d2eff3f19945255bddb5db0c0f7f9161593ada80cd2b50ecac9c4  frozen/efficacy/label_free_triplets.jsonl' | sha256sum -c -
+          echo 'dd594c1b1a3acefd94ece3a23166bd98754b87dadcde1b1c5998d02296e42050  frozen/overlap/source_overlap.json' | sha256sum -c -
+          echo '265dfb75e33d2eff3f19945255bddb5db0c0f7f9161593ada80cd2b50ecac9c4  frozen/overlap/label_free_triplets.jsonl' | sha256sum -c -
+      - name: Download four already evaluated MSnLib libraries with immutable MD5s
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/prior_msnlib results/posthoc_massbank_robustness
+          download_md5() {
+            url="$1"; dest="$2"; checksum="$3"
+            ok=0
+            for attempt in 1 2 3 4 5 6; do
+              rm -f "$dest"
+              if curl --location --fail --retry 3 --retry-all-errors --retry-delay 4 \
+                 --connect-timeout 30 --max-time 2400 "$url" -o "$dest"; then
+                if echo "$checksum  $dest" | md5sum -c -; then ok=1; break; fi
+              fi
+              sleep 8
+            done
+            test "$ok" = 1
+          }
+          for entry in \
+             "20241003_mcebio_neg_ms2.json:f0b8490cd619c9ea7fdea8de95393c28" \
+             "20241003_mcescaf_pos_ms2.json:3ba52914a2f27239c5278c7d96888ecf" \
+             "20241003_enammol_pos_ms2.json:ed6db189b4b5e1fc6a8cf3df211dbbe8" \
+             "20241003_enamdisc_neg_ms2.json:ad9c6e971a1902c091aeb4d555ca8db6"; do
+            filename="${entry%%:*}"
+            md5="${entry##*:}"
+            download_md5 "https://zenodo.org/records/21105617/files/${filename}?download=1" \
+              "/tmp/prior_msnlib/${filename}" "$md5"
+          done
+      - name: Derive exact original-MSnLib structure identities without opening outcomes
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/export_prior_msnlib_key_inventory.py \
+            --source mcebio_neg=/tmp/prior_msnlib/20241003_mcebio_neg_ms2.json \
+            --source mcescaf_pos=/tmp/prior_msnlib/20241003_mcescaf_pos_ms2.json \
+            --source enammol_pos=/tmp/prior_msnlib/20241003_enammol_pos_ms2.json \
+            --source enamdisc_neg=/tmp/prior_msnlib/20241003_enamdisc_neg_ms2.json \
+            --out results/posthoc_massbank_robustness/prior_evaluated_key_inventory.json
+      - name: Evaluate ALL retrospective strata of the original frozen MassBank scores
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/posthoc_massbank_robustness.py \
+            --efficacy-dir frozen/efficacy \
+            --overlap-dir frozen/overlap \
+            --prior-inventory results/posthoc_massbank_robustness/prior_evaluated_key_inventory.json \
+            --bootstrap-draws 3000 \
+            --out results/posthoc_massbank_robustness
+          cat results/posthoc_massbank_robustness/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Record provenance even on failure
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results/posthoc_massbank_robustness
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          data={
+            "evaluation":"POSTHOC / EXPLORATORY, NOT NEW HELD-OUT VALIDATION",
+            "frozen_scoring_run_id":38918658343,
+            "prior_identity_audit_run_id":38920155068,
+            "scoring_rows_sha256":"2c973a7b83c1a48f95f923107ee72bb44a2a95f7d7da403f9d6f541d662efc8b",
+            "source_overlap_sha256":"dd594c1b1a3acefd94ece3a23166bd98754b87dadcde1b1c5998d02296e42050",
+            "workflow_head_sha":os.getenv("GITHUB_SHA"),
+            "scorer_or_model_refitting":False,
+          }
+          (Path("results/posthoc_massbank_robustness")/"provenance.json").write_text(json.dumps(data,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: posthoc-massbank-structure-nonoverlap-and-source-robustness
+          path: results/posthoc_massbank_robustness/
+          if-no-files-found: warn
+          retention-days: 90
