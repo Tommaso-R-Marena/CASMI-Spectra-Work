@@ -1,0 +1,103 @@
+name: frozen-massbank-formula-isomer-identification
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/massbank-structure-identification-20261016]
+    paths:
+      - '.github/workflows/frozen-massbank-formula-isomer-identification.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  FROZEN_ISOMER_IMPLEMENTATION_SHA: 0d9e8db706ef7c276a5e7109a838bf5986a551a4
+
+jobs:
+  identification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify strictly frozen posthoc identification implementation and protocols
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin "$FROZEN_ISOMER_IMPLEMENTATION_SHA"
+          git diff --exit-code "$FROZEN_ISOMER_IMPLEMENTATION_SHA" -- \
+            docs/MASSBANK_FORMULA_ISOMER_IDENTIFICATION_PROTOCOL.md \
+            scripts/benchmark_massbank_isomer_identification.py \
+            tests/test_massbank_isomer_identification.py
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Retrieve and cryptographically verify ORIGINAL scored rows and original prior-library identity inventory
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/efficacy frozen/prior results/massbank_isomer_identification
+          gh run download 38918658343 --repo "$GITHUB_REPOSITORY" \
+            --name massbank-2026-03-frozen-external-efficacy --dir frozen/efficacy
+          gh run download 38934839645 --repo "$GITHUB_REPOSITORY" \
+            --name posthoc-massbank-structure-nonoverlap-and-source-robustness --dir frozen/prior
+          echo '2c973a7b83c1a48f95f923107ee72bb44a2a95f7d7da403f9d6f541d662efc8b  frozen/efficacy/rows.jsonl' | sha256sum -c -
+          echo '265dfb75e33d2eff3f19945255bddb5db0c0f7f9161593ada80cd2b50ecac9c4  frozen/efficacy/label_free_triplets.jsonl' | sha256sum -c -
+          echo '5520ecb3f134290953fd5ad63b97cc1561dd39c2ea658aeaf4a90b2be348d07a  frozen/prior/prior_evaluated_key_inventory.json' | sha256sum -c -
+      - name: Download exactly frozen MassBank 2026.03 raw measurements
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ok=0
+          for attempt in 1 2 3 4 5 6; do
+            rm -f /tmp/massbank-2026.03.zip
+            if curl --location --fail --retry 3 --retry-all-errors --retry-delay 5 \
+               --connect-timeout 30 --max-time 2400 \
+               'https://zenodo.org/records/19590880/files/MassBank/MassBank-data-2026.03.zip?download=1' \
+               -o /tmp/massbank-2026.03.zip; then
+              if echo '1de9018361f7ffc689aa327f92e97e0f  /tmp/massbank-2026.03.zip' | md5sum -c -; then ok=1; break; fi
+            fi
+            sleep 10
+          done
+          test "$ok" = 1
+          echo '12c6a922929f9bf2484c46586b6101512a415e44680558883b0630c6e47905fb  /tmp/massbank-2026.03.zip' | sha256sum -c -
+      - name: Run previously frozen isomer identification on raw spectra without refitting
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/benchmark_massbank_isomer_identification.py \
+            --massbank-zip /tmp/massbank-2026.03.zip \
+            --efficacy-dir frozen/efficacy \
+            --prior-inventory frozen/prior/prior_evaluated_key_inventory.json \
+            --out results/massbank_isomer_identification
+          cat results/massbank_isomer_identification/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Immutable status/provenance
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results/massbank_isomer_identification
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p={
+            "evaluation_class":"POSTHOC SAME MASSBANK SOURCE / NEW IDENTIFICATION TASK",
+            "original_scored_run":38918658343,
+            "original_prior_structure_inventory_run":38934839645,
+            "frozen_implementation_sha":os.environ["FROZEN_ISOMER_IMPLEMENTATION_SHA"],
+            "workflow_sha":os.getenv("GITHUB_SHA"),
+            "dataset":"MassBank 2026.03",
+            "model_training_or_parameter_tuning":False,
+          }
+          (Path("results/massbank_isomer_identification")/"provenance.json").write_text(json.dumps(p,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: massbank-frozen-posthoc-isomer-identification
+          path: results/massbank_isomer_identification/
+          if-no-files-found: warn
+          retention-days: 90
