@@ -1,0 +1,49 @@
+name: posthoc-massbank-isomer-margin
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/massbank-isomer-margin-robustness-20261016]
+    paths:
+      - '.github/workflows/posthoc-massbank-isomer-margin.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  secondary-margin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Unit tests for secondary analysis
+        run: |
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Fetch original completed isomer ranking artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/isomer results/isomer_margin_secondary
+          gh run download 38963742589 --repo "$GITHUB_REPOSITORY" \
+            --name massbank-frozen-posthoc-isomer-identification --dir frozen/isomer
+          echo '32e3b1240b48cc82717fdf43ec21abdf0cdd528f31137c9f138c0435911375fa  frozen/isomer/rows.jsonl' | sha256sum -c -
+          echo '20ea49a7d8465ad4f7791fda2ed640382b88b210598e75cfd9b47e8a07f6f0a0  frozen/isomer/result.json' | sha256sum -c -
+      - name: Preserve primary null and audit secondary correct-versus-decoy margins
+        run: |
+          PYTHONPATH=src:. python scripts/audit_massbank_isomer_margin.py \
+            --original-run-dir frozen/isomer \
+            --out results/isomer_margin_secondary
+          cat results/isomer_margin_secondary/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: massbank-isomer-secondary-margin-not-mrr
+          path: results/isomer_margin_secondary/
+          if-no-files-found: warn
+          retention-days: 90
