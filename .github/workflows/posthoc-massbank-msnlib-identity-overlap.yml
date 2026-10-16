@@ -1,0 +1,111 @@
+name: posthoc-massbank-msnlib-identity-overlap
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/massbank-source-overlap-audit-20261016]
+    paths:
+      - '.github/workflows/posthoc-massbank-msnlib-identity-overlap.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  metadata-overlap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify original frozen audit and scoring remain unchanged; tests
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin f027125817542bb24c29192290cda15492c3d3b5
+          git fetch --depth=1 origin e440a0e2ed5e9b79b24986e7da0a49c6b60079e1
+          git diff --exit-code f027125817542bb24c29192290cda15492c3d3b5 -- \
+            docs/MASSBANK_EXTERNAL_ENERGY_GEOMETRY_GATE.md \
+            scripts/audit_massbank_external_energy_geometry.py
+          git diff --exit-code e440a0e2ed5e9b79b24986e7da0a49c6b60079e1 -- \
+            docs/MASSBANK_EXTERNAL_ENERGY_GEOMETRY_SCORING_PROTOCOL.md \
+            scripts/benchmark_massbank_external_energy_geometry.py \
+            src/qfd/target_blind_geometry.py \
+            src/qfd/power_geometry.py \
+            src/qfd/stats.py
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Download and MD5-verify MassBank, original discovery, four old evaluation cohorts
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/overlap_inputs results/massbank_msnlib_overlap
+          download_md5() {
+            url="$1"; dest="$2"; checksum="$3"
+            ok=0
+            for attempt in 1 2 3 4 5 6; do
+              rm -f "$dest"
+              if curl --location --fail --retry 3 --retry-all-errors --retry-delay 4 \
+                 --connect-timeout 30 --max-time 2400 "$url" -o "$dest"; then
+                if echo "$checksum  $dest" | md5sum -c -; then ok=1; break; fi
+              fi
+              sleep 8
+            done
+            test "$ok" = 1
+          }
+          download_md5 "https://zenodo.org/records/19590880/files/MassBank/MassBank-data-2026.03.zip?download=1" \
+            /tmp/overlap_inputs/MassBank-data-2026.03.zip 1de9018361f7ffc689aa327f92e97e0f
+          for entry in \
+             "20241003_mcebio_pos_ms2.json:806f33c9c60af74a0aa21fb66aeb84f3" \
+             "20241003_mcebio_neg_ms2.json:f0b8490cd619c9ea7fdea8de95393c28" \
+             "20241003_mcescaf_pos_ms2.json:3ba52914a2f27239c5278c7d96888ecf" \
+             "20241003_enammol_pos_ms2.json:ed6db189b4b5e1fc6a8cf3df211dbbe8" \
+             "20241003_enamdisc_neg_ms2.json:ad9c6e971a1902c091aeb4d555ca8db6"; do
+            filename="${entry%%:*}"
+            md5="${entry##*:}"
+            download_md5 "https://zenodo.org/records/21105617/files/${filename}?download=1" \
+              "/tmp/overlap_inputs/${filename}" "$md5"
+          done
+          sha256sum /tmp/overlap_inputs/* > results/massbank_msnlib_overlap/input_sha256.txt
+      - name: Rebuild exact prespecified metadata cohort and audit other-library identity overlap
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_massbank_external_energy_geometry.py \
+            /tmp/overlap_inputs/MassBank-data-2026.03.zip \
+            --discovery-msnlib /tmp/overlap_inputs/20241003_mcebio_pos_ms2.json \
+            --out results/massbank_msnlib_overlap
+          PYTHONPATH=src:. python scripts/audit_massbank_msnlib_identity_overlap.py \
+            --feasibility-dir results/massbank_msnlib_overlap \
+            --discovery /tmp/overlap_inputs/20241003_mcebio_pos_ms2.json \
+            --evaluated mcebio_neg=/tmp/overlap_inputs/20241003_mcebio_neg_ms2.json \
+            --evaluated mcescaf_pos=/tmp/overlap_inputs/20241003_mcescaf_pos_ms2.json \
+            --evaluated enammol_pos=/tmp/overlap_inputs/20241003_enammol_pos_ms2.json \
+            --evaluated enamdisc_neg=/tmp/overlap_inputs/20241003_enamdisc_neg_ms2.json \
+            --out results/massbank_msnlib_overlap
+      - name: Record post-release provenance
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results/massbank_msnlib_overlap
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p={
+            "evaluation_class":"POSTHOC METADATA-ONLY SOURCE/STRUCTURE OVERLAP, NOT A NEW EFFICACY TEST",
+            "original_frozen_efficacy_run":38918658343,
+            "original_frozen_feasibility_run":38917760935,
+            "workflow_sha":os.getenv("GITHUB_SHA"),
+            "model_refitting_or_score_filtering":False,
+            "no_spectra_or_prediction_scores_read":True,
+          }
+          (Path("results/massbank_msnlib_overlap")/"provenance.json").write_text(json.dumps(p,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: posthoc-massbank-msnlib-structure-overlap
+          path: results/massbank_msnlib_overlap/
+          if-no-files-found: warn
+          retention-days: 90
