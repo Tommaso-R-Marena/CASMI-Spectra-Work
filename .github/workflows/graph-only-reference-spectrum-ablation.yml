@@ -1,0 +1,64 @@
+name: graph-only-no-reference-spectra-4398-class2-proxy
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/graph-only-reference-spectrum-ablation-20261017]
+    paths:
+      - '.github/workflows/graph-only-reference-spectrum-ablation.yml'
+      - 'scripts/benchmark_graph_only_no_reference_spectra_4398.py'
+      - 'tests/test_graph_only_no_reference_spectra_4398.py'
+      - 'docs/GRAPH_ONLY_NO_REFERENCE_SPECTRA_PROXY_20261017.md'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  measured-query-graph-only-without-reference-peaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Full inherited regression and exact conditional null test suite
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]' zstandard
+          PYTHONPATH=src:. pytest -q
+      - name: Retrieve original failed V1, frozen positive V2, original graph results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/v1 frozen/v2 frozen/graph results/graph_only /tmp/graph_only
+          test "$(gh run view 39055589643 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          test "$(gh run view 39055988705 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          test "$(gh run view 39058512753 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          gh run download 39055589643 --repo "$GITHUB_REPOSITORY" --name harmonized2026-cross-provider-native-identity-gate --dir frozen/v1
+          gh run download 39055988705 --repo "$GITHUB_REPOSITORY" --name harmonized2026-positive-only-prescore-v2-decision --dir frozen/v2
+          gh run download 39058512753 --repo "$GITHUB_REPOSITORY" --name graph-fragment-4398-retrospective-native-chemistry --dir frozen/graph
+          for p in frozen/v1/feasibility.json frozen/v1/reference_manifest.jsonl frozen/v1/hard_queries.jsonl frozen/v2/feasibility.json frozen/graph/result.json frozen/graph/query_metrics.jsonl; do test -s "$p"; done
+      - name: Verify immutable original combined experimental source
+        run: |
+          set -euxo pipefail
+          curl -Lf --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 3000 \
+            'https://zenodo.org/records/20042904/files/combined-gnps-mass-spec-gym-npc-faithful.harmonized-subset.top128.mgf.zst?download=1' \
+            -o /tmp/graph_only/source.mgf.zst
+          echo 'aee5a595960ef1284fe9977b6560a1ff771c07bb28c4a8e2e2ef47020b35724e  /tmp/graph_only/source.mgf.zst' | sha256sum -c -
+      - name: Reproduce original graph score without reading ANY candidate reference fragment peaks
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/benchmark_graph_only_no_reference_spectra_4398.py \
+            --source /tmp/graph_only/source.mgf.zst \
+            --v1-dir frozen/v1 --v2-dir frozen/v2 \
+            --original-graph frozen/graph --out results/graph_only
+          cat results/graph_only/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve every query result, exact label-null and scientific failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: graph-only-reference-spectra-ablated-4398-class2-proxy
+          path: results/graph_only/
+          retention-days: 90
+          if-no-files-found: warn
