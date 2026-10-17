@@ -1,0 +1,76 @@
+name: multims2-posthoc-rank-stability-certificates
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/phenolicsdb-support-mechanism-20261017]
+    paths:
+      - '.github/workflows/multims2-rank-stability-certificates.yml'
+      - 'src/qfd/support_certificates.py'
+      - 'scripts/audit_multims2_rank_certificates.py'
+      - 'tests/test_support_certificates.py'
+      - 'tests/test_multims2_rank_certificates.py'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  exact-ranking-and-affinity-certificates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify full mathematical and original regression suite
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Verify original scientific identification null and fetch original metadata-only cohort
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/dual frozen/mgf results/rank_certificates
+          test "$(gh run view 39047245864 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          gh run download 39047245864 --repo "$GITHUB_REPOSITORY" \
+            --name multims2-dual-isomer-identification-exploratory --dir frozen/dual
+          test -s frozen/dual/dual_isomer_gate/feasibility.json
+          test -s frozen/dual/dual_isomer_gate/eligible_isomer_queries.jsonl
+          test -s frozen/dual/dual_isomer_scores/query_metrics.jsonl
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          j=json.loads(Path("frozen/dual/dual_isomer_scores/result.json").read_text())
+          assert j["status"]=="POSTHOC_MULTIMS2_CID_EAD_SAME_FORMULA_IDENTIFICATION"
+          assert j["result"]["n_queries"]==63
+          assert j["result"]["n_competition_groups"]==29
+          assert j["result"]["joint_dual_modal_identification_success"] is False
+          assert abs(j["result"]["metrics"]["cid_h"]["MRR"]-.906878)<1e-6
+          assert abs(j["result"]["metrics"]["cid_q"]["MRR"]-.906878)<1e-6
+          PY
+      - name: Fetch unchanged 77 MB CID+EAD source original version and verify hash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 6 --retry-all-errors --retry-delay 4 --connect-timeout 30 --max-time 2400 \
+            'https://raw.githubusercontent.com/zamboni-lab/MultiMS2/659bd9b608408a75ecbb4b03295ed4c03ba52539/data/multims2_spectra.mgf' \
+            -o frozen/mgf/source.mgf
+          test "$(stat -c %s frozen/mgf/source.mgf)" = 77183510
+          echo '4ef86f75a12ad2fdadbd63732e2d6690f4e506a6ff08f171758c1808d1249673  frozen/mgf/source.mgf' | sha256sum -c -
+      - name: Replay all real identification ranks and independently certify invariants
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_multims2_rank_certificates.py \
+            --mgf frozen/mgf/source.mgf \
+            --gate-dir frozen/dual/dual_isomer_gate \
+            --original-query-scores frozen/dual/dual_isomer_scores/query_metrics.jsonl \
+            --out results/rank_certificates
+          cat results/rank_certificates/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish original-cohort rank and mathematical certificates
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: multims2-isomer-rank-stability-mathematical-certificates
+          path: results/rank_certificates/
+          retention-days: 90
+          if-no-files-found: warn
