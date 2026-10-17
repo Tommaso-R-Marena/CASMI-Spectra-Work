@@ -1,0 +1,51 @@
+name: splisum-native-header-diagnostic-no-peaks
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/splisum-fifth-origin-molecular-retrieval-20261017]
+    paths:
+      - '.github/workflows/splisum-native-header-diagnostic.yml'
+permissions:
+  contents: read
+jobs:
+  native-metadata-schema-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Inspect ONLY first native metadata header, no numeric fragment line
+        run: |
+          python - <<'PY'
+          import urllib.request,sys
+          base='https://zenodo.org/records/19834896/files/'
+          for label,filename in [
+              ('qpos','Query_INT_positive_20ev.mgf'),
+              ('qneg','Query_INT_negative_20ev.mgf'),
+              ('tpos','TARGET_20ev_positive.mgf'),
+              ('tneg','TARGET_20ev_negative.mgf')]:
+              u=base+filename+'?download=1'
+              req=urllib.request.Request(u,headers={'Range':'bytes=0-8191'})
+              with urllib.request.urlopen(req,timeout=65) as f:
+                  blob=f.read(8192)
+                  print(label, 'HTTP', f.status, 'Content-Range',f.headers.get('Content-Range'),
+                        'first bytes downloaded',len(blob))
+              metadata=[]
+              entered=False
+              for line in blob.decode('utf-8',errors='replace').splitlines():
+                  line=line.strip()
+                  if line.upper()=='BEGIN IONS':
+                      entered=True;continue
+                  if not entered or line.upper()=='END IONS':continue
+                  if '=' not in line:break
+                  k,v=line.split('=',1)
+                  if k.strip().upper() in {
+                      'INCHIKEY','INCHI','INCHIAUX','IONMODE','ION_MODE',
+                      'IONIZATION_MODE','POLARITY','CHARGE','MSLEVEL',
+                      'ADDUCT','PRECURSOR_MZ','PRECURSORMZ','PEPMASS',
+                      'SMILES','TITLE','NAME','SPECTRUMID'}:
+                      metadata.append((k.strip(),v[:170].strip()))
+              print('NATIVE HEADERS',repr(metadata))
+          PY
