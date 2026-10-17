@@ -55,6 +55,15 @@ jobs:
             --ead-result frozen/ead/result.json \
             --out results/paired_modality
           cat results/paired_modality/report.md >> "$GITHUB_STEP_SUMMARY"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          s=json.loads(Path("results/paired_modality/result.json").read_text())["matched_results"]
+          print("POSTHOC OVERLAP-SIMILARITY STRATA (DESCRIPTIVE, NOT CONFIRMATORY):")
+          for k,v in s.items():
+              if k.startswith("endpoint_bc_matched_abs_diff_le_"):
+                  print(k,":",v)
+          PY
       - name: Preserve retrospective and causal confounding labels
         if: always()
         run: |
