@@ -1,0 +1,52 @@
+name: graph-4398-retrospective-formula-influence-audit
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/graph-4398-formula-influence-audit-20261017]
+    paths:
+      - '.github/workflows/graph-4398-formula-influence-audit.yml'
+      - 'scripts/audit_graph_4398_formula_influence.py'
+      - 'tests/test_graph_4398_formula_influence.py'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  original-graph-influence-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: All original science tests and leave-one-formula regression
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Retrieve exact immutable already scored graph experiment; no raw spectra
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/graph_published results/graph_influence
+          test "$(gh run view 39058512753 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          gh run download 39058512753 --repo "$GITHUB_REPOSITORY" \
+            --name graph-fragment-4398-retrospective-native-chemistry \
+            --dir frozen/graph_published
+          test -s frozen/graph_published/result.json
+          test -s frozen/graph_published/query_metrics.jsonl
+      - name: Audit exact influence of every chemical formula and positive gain concentration
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_graph_4398_formula_influence.py \
+            --prior frozen/graph_published --out results/graph_influence
+          cat results/graph_influence/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve negative findings, per-formula totals and published source digests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: graph-fragment-4398-exact-formula-influence-audit
+          path: results/graph_influence/
+          retention-days: 90
+          if-no-files-found: warn
