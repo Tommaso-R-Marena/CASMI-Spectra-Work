@@ -107,7 +107,8 @@ def test_structure_block_keeps_two_polarities_and_target_energies_together():
         for e in (40,60):
             rows.append({"inchikey":"MOLECULE-ONE","formula":"not used",
                          "polarity":p,"quarter":.6,"hellinger":.5,
-                         "support_only":.55})
+                         "support_only":.55,"linear":.4,"best_endpoint":.3,
+                         "endpoint_bhattacharyya":.8,"unmatched_target_mass":.1})
     result=summary(rows,False)
     assert result["n_unique_structure_blocks"]==1
     assert result["n_mode_structure_groups"]==2
