@@ -1,0 +1,52 @@
+name: massbank-graph-252-stratified-robustness
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/massbank-graph-robustness-stratified-20261017]
+    paths:
+      - '.github/workflows/massbank-graph-stratified-robustness.yml'
+      - 'scripts/audit_massbank_graph_stratified.py'
+      - 'tests/test_massbank_graph_stratified.py'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  previously-published-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test every original MassBank and graph method scientific invariant
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Download exact original 252 real graph-only MassBank result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/massbank_graph results/stratified
+          test "$(gh run view 39061071789 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          gh run download 39061071789 --repo "$GITHUB_REPOSITORY" \
+            --name massbank-202603-graph-only-second-source-252 \
+            --dir frozen/massbank_graph
+          test -s frozen/massbank_graph/results.json
+          test -s frozen/massbank_graph/per_query_ranking.jsonl
+      - name: Recheck full source MRR then test positive ion and formula contribution sensitivity
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_massbank_graph_stratified.py \
+            --prior frozen/massbank_graph --out results/stratified
+          cat results/stratified/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve negative outcomes and source artifact hashes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: massbank-graph-252-positive-negative-source-robustness
+          path: results/stratified/
+          retention-days: 90
+          if-no-files-found: warn
