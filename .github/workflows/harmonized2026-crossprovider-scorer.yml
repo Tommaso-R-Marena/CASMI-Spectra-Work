@@ -30,24 +30,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euxo pipefail
-          mkdir -p frozen/metadata results/firstlook
-          gh run watch 39055589643 --repo "$GITHUB_REPOSITORY" --exit-status
+          mkdir -p frozen/metadata frozen/v2 results/firstlook
+          gh run watch 39055988705 --repo "$GITHUB_REPOSITORY" --exit-status
           test "$(gh run view 39055589643 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          test "$(gh run view 39055988705 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
           gh run download 39055589643 --repo "$GITHUB_REPOSITORY" \
             --name harmonized2026-cross-provider-native-identity-gate --dir frozen/metadata
+          gh run download 39055988705 --repo "$GITHUB_REPOSITORY" \
+            --name harmonized2026-positive-only-prescore-v2-decision --dir frozen/v2
           python - <<'PY'
           from pathlib import Path
           import json,os
-          p=Path('frozen/metadata/feasibility.json')
-          if not p.is_file():raise RuntimeError('prior native metadata gate missing')
-          d=json.loads(p.read_text())
-          assert d['status']=='HARMONIZED2026_CROSS_PROVIDER_NATIVE_HEADER_GATE_V1'
-          assert d['query_peak_locations_or_intensities_opened'] is False
+          p1=Path('frozen/metadata/feasibility.json')
+          p2=Path('frozen/v2/feasibility.json')
+          if not p1.is_file() or not p2.is_file():
+              raise RuntimeError('V1 original and V2 prescore source gates required')
+          a=json.loads(p1.read_text())
+          b=json.loads(p2.read_text())
+          assert a['status']=='HARMONIZED2026_CROSS_PROVIDER_NATIVE_HEADER_GATE_V1'
+          assert a['gate_pass'] is False
+          assert a['query_peak_locations_or_intensities_opened'] is False
+          assert b['status']=='HARMONIZED2026_POSITIVE_ONLY_NATIVE_COHORT_V2'
+          assert b['original_v1_two_polarity_scientific_pass'] is False
+          assert b['source_query_spectra_opened'] is False
           with open(os.environ['GITHUB_OUTPUT'],'a') as f:
-              f.write('passed='+str(d['gate_pass']).lower()+'\n')
-          if not d['gate_pass']:
+              f.write('passed='+str(b['gate_pass']).lower()+'\n')
+          if not b['gate_pass']:
               with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
-                  f.write('Scientific metadata feasibility FAILED; no query or reference peaks opened.\n')
+                  f.write('Positive-only V2 scientific gate FAILED; no spectra opened.\n')
           PY
       - name: Re-download identical immutable 2026 source only after eligibility pass
         if: steps.gate.outputs.passed == 'true'
@@ -65,7 +75,7 @@ jobs:
           set -euxo pipefail
           PYTHONPATH=src:. python scripts/benchmark_harmonized2026_crossprovider.py \
             --zst /tmp/harmonized2026_replay/source.mgf.zst \
-            --gate-dir frozen/metadata --out results/firstlook
+            --gate-dir frozen/metadata --positive-v2-dir frozen/v2 --out results/firstlook
           cat results/firstlook/report.md >> "$GITHUB_STEP_SUMMARY"
       - name: Publish complete scientific report/artifacts, including negative outcomes
         if: always()
