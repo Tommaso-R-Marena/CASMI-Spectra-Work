@@ -1,0 +1,85 @@
+name: massbank-202603-graph-native-header-prescore-gate
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/massbank-graph-only-structural-transfer-20261017]
+    paths:
+      - '.github/workflows/massbank-graph-native-header-prescore-gate.yml'
+      - 'scripts/audit_massbank_graph_native_headers.py'
+      - 'tests/test_massbank_graph_native_headers.py'
+      - 'docs/MASSBANK_GRAPH_ONLY_SECOND_SOURCE_PRESCORE_20261017.md'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  independent-origin-native-chemistry-headers-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Scientific metadata and exact original source regression suite
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]' 'rdkit==2025.9.6'
+          PYTHONPATH=src:. pytest -q
+      - name: Download original immutable scorer artifacts and prior structure inventory
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/massbank_original frozen/msnlib_prior results/massbank_graph_metadata
+          gh run download 38918658343 --repo "$GITHUB_REPOSITORY" \
+            --name massbank-2026-03-frozen-external-efficacy --dir frozen/massbank_original
+          gh run download 38934839645 --repo "$GITHUB_REPOSITORY" \
+            --name posthoc-massbank-structure-nonoverlap-and-source-robustness --dir frozen/msnlib_prior
+          echo '2c973a7b83c1a48f95f923107ee72bb44a2a95f7d7da403f9d6f541d662efc8b  frozen/massbank_original/rows.jsonl' | sha256sum -c -
+          echo '265dfb75e33d2eff3f19945255bddb5db0c0f7f9161593ada80cd2b50ecac9c4  frozen/massbank_original/label_free_triplets.jsonl' | sha256sum -c -
+          echo '5520ecb3f134290953fd5ad63b97cc1561dd39c2ea658aeaf4a90b2be348d07a  frozen/msnlib_prior/prior_evaluated_key_inventory.json' | sha256sum -c -
+      - name: Download exact pinned source MassBank 2026.03 measurements
+        run: |
+          set -euxo pipefail
+          ok=0
+          for attempt in 1 2 3 4 5 6; do
+            rm -f /tmp/massbank-2026.03.zip
+            if curl -Lf --retry 3 --retry-all-errors --retry-delay 5 \
+                 --connect-timeout 30 --max-time 2400 \
+                 'https://zenodo.org/records/19590880/files/MassBank/MassBank-data-2026.03.zip?download=1' \
+                 -o /tmp/massbank-2026.03.zip; then
+              if echo '1de9018361f7ffc689aa327f92e97e0f  /tmp/massbank-2026.03.zip' | md5sum -c -; then ok=1; break; fi
+            fi
+            sleep 10
+          done
+          test "$ok" = 1
+          echo '12c6a922929f9bf2484c46586b6101512a415e44680558883b0630c6e47905fb  /tmp/massbank-2026.03.zip' | sha256sum -c -
+      - name: Read ONLY original candidate reference HEADERS, never source peak table
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_massbank_graph_native_headers.py \
+            --source /tmp/massbank-2026.03.zip \
+            --efficacy frozen/massbank_original \
+            --prior-inventory frozen/msnlib_prior/prior_evaluated_key_inventory.json \
+            --out results/massbank_graph_metadata
+          python - <<'PY'
+          from pathlib import Path
+          import json,os
+          j=json.loads(Path('results/massbank_graph_metadata/feasibility.json').read_text())
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('## MassBank actual independent archive native graph feasibility\n\n')
+              f.write('**Scientific metadata status '+('PASS' if j['gate_pass'] else 'FAIL')+'**\n\n')
+              for k in ('unchanged_original_queries','unchanged_original_formula_blocks',
+                        'n_queries_in_pools_with_all_graph_structures_usable',
+                        'n_formulas_in_pools_with_all_graph_structures_usable'):
+                  f.write('- '+k+': '+str(j[k])+'\n')
+              f.write('No new experimental fragment peak lists read. Gate failure blocks scorer.\n')
+          PY
+      - name: Preserve complete prescore feasibility including a scientific negative
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: massbank-2026-graph-native-header-prescore-lockbox
+          path: results/massbank_graph_metadata/
+          retention-days: 90
+          if-no-files-found: warn
