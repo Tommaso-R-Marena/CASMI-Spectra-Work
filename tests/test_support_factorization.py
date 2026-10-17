@@ -91,7 +91,7 @@ def test_invalid_mass_and_parameter_fail_closed(a,b,t,alpha,power):
 
 
 def test_exact_randomization_all_sign_assignments_and_clustering():
-    x=[.12,.12,-.01,-.01]
+    x=[.12,.12,.01,.01]
     groups=["A","A","B","B"]
     stat=exact_block_signflip(x,groups)
     assert stat["exact_assignments"]==4
