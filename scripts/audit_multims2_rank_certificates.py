@@ -28,6 +28,7 @@ from qfd.support_certificates import (
     distribution_affinity_difference_upper,
     score_perturbation_certificate,certify_top1_unchanged)
 from qfd.target_blind_geometry import reference_only_grid,query_mass_on_reference_grid,affinity
+from qfd.stats import paired_block_bootstrap_delta,paired_block_signflip_test,paired_win_loss_tie
 
 METHODS=("cid_h","cid_q","cid_hybrid","cid_support")
 KEY=("group_id","inchikey")
@@ -184,6 +185,26 @@ def evaluate(mgf:Path,gate_dir:Path,original_query_scores:Path,out:Path):
             "guaranteed tight, not a causal model, not demonstrated CASMI generalization."
         ),
     }
+    # Retrospective/secondary inference ONLY. Do not turn a single changed
+    # ranking in 63 already-evaluated queries into a breakthrough claim.
+    inference={}
+    for i,(name,model,ref) in enumerate((
+        ("support_vs_hellinger","cid_support","cid_h"),
+        ("hybrid_vs_hellinger","cid_hybrid","cid_h"),
+        ("support_vs_quarter","cid_support","cid_q"),
+    )):
+        left=np.asarray([r["scores_rank"][model]["reciprocal_rank"] for r in scored],float)
+        right=np.asarray([r["scores_rank"][ref]["reciprocal_rank"] for r in scored],float)
+        blocks=[r["formula"] for r in scored]
+        inference[name]={
+            "mean_mrr_difference":float((left-right).mean()),
+            "wins_losses_ties":paired_win_loss_tie(left,right,atol=1e-12),
+            "formula_cluster_bootstrap95":paired_block_bootstrap_delta(
+                left,right,blocks,n_boot=10000,seed=20261017+17*i),
+            "formula_cluster_signflip":paired_block_signflip_test(
+                left,right,blocks,n_permutations=100000,seed=20261017+17*i),
+        }
+    result["posthoc_secondary_inference_not_preregistered"]=inference
     out.mkdir(parents=True,exist_ok=True)
     (out/"result.json").write_text(json.dumps(result,sort_keys=True,indent=2)+"\n")
     with (out/"rank_certificates.jsonl").open("w") as f:
@@ -205,6 +226,13 @@ def evaluate(mgf:Path,gate_dir:Path,original_query_scores:Path,out:Path):
     for name,r in result["comparisons"].items():
         lines.append(f"| {name} | {r['n_certified_unchanged']}/{r['n_queries']} | "
                      f"{r['n_observed_top1_changed']}/{r['n_queries']} |")
+    lines += ["","### Posthoc MRR significance diagnostics (NOT confirmatory)",""]
+    for name,v in inference.items():
+        ci=v["formula_cluster_bootstrap95"]
+        lines.append(f"- {name}: MRR difference {v['mean_mrr_difference']:+.6f}; "
+                     f"95% formula bootstrap [{ci['ci_low']:+.6f},{ci['ci_high']:+.6f}], "
+                     f"block-signflip p={v['formula_cluster_signflip']['p_value_two_sided']:.6f}, "
+                     f"W/L/T={v['wins_losses_ties']}")
     lines += ["","Certificates need only endpoint reference distributions and baseline "
               "candidate affinity gaps. An uncertified change is UNKNOWN, not a false claim.",
               "",result["limitations"],""]
