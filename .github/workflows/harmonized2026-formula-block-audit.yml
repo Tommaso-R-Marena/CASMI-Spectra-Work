@@ -1,0 +1,50 @@
+name: harmonized2026-posthoc-formula-block-audit
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/gnps-massspecgym-cross-library-lockbox-20261017]
+    paths:
+      - '.github/workflows/harmonized2026-formula-block-audit.yml'
+      - 'scripts/audit_harmonized2026_formula_blocks.py'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  original-outcome-only-negative-replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install exact same statistical reference implementation
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Use ONLY existing completed original firstlook artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/firstlook results/formula_audit
+          test "$(gh run view 39056094950 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          gh run download 39056094950 --repo "$GITHUB_REPOSITORY" \
+            --name harmonized2026-independent-firstlook-molecular-ranking --dir frozen/firstlook
+          test -s frozen/firstlook/results.json
+          test -s frozen/firstlook/query_metrics.jsonl
+      - name: Reproduce all source metrics, and conservatively block by native formula
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_harmonized2026_formula_blocks.py \
+            --prior-dir frozen/firstlook --out results/formula_audit
+          cat results/formula_audit/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve reproducible interpretation/negative result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harmonized2026-formula-cluster-negative-firstlook-audit
+          path: results/formula_audit/
+          if-no-files-found: warn
+          retention-days: 90
