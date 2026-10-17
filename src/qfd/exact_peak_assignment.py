@@ -93,11 +93,15 @@ def _one_method(qi,ri,comps,method):
             if not math.isfinite(weight) or weight<0:
                 raise RuntimeError("nonfinite matching edge weight")
             matrix[qidx[i],ridx[j]]=weight
-        assignment=linear_sum_assignment(-matrix)
-        for a,b in zip(*assignment):
-            if b<m:
-                if matrix[a,b]<0:raise RuntimeError("forbidden tolerance edge selected")
-                value+=float(matrix[a,b])
+        if n==1 and m==1:
+            # The overwhelmingly common isolated edge is already optimal.
+            value+=float(matrix[0,0])
+        else:
+            assignment=linear_sum_assignment(-matrix)
+            for a,b in zip(*assignment):
+                if b<m:
+                    if matrix[a,b]<0:raise RuntimeError("forbidden tolerance edge selected")
+                    value+=float(matrix[a,b])
         if len(edges)>min(len(qs),len(rs)):ambiguous_components+=1
     if not math.isfinite(value) or value<0 or value>1+1e-8:
         raise RuntimeError("global assignment similarity invalid")
