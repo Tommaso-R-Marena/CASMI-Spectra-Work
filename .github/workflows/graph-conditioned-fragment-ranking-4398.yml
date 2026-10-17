@@ -1,0 +1,72 @@
+name: gnps-msg-graph-conditioned-fragment-identification-4398
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/graph-conditioned-ms2-fragmentation-v1-20261017]
+    paths:
+      - '.github/workflows/graph-conditioned-fragment-ranking-4398.yml'
+      - 'src/qfd/graph_fragment_signatures.py'
+      - 'scripts/benchmark_graph_conditioned_fragments_4398.py'
+      - 'tests/test_graph_fragment_signatures.py'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  native-chemistry-conditioned-identification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: All 260+ regression tests and RDKit molecular graph sanity
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Pin original all-polarity failure, prescore positive-only V2, and original null
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/v1 frozen/v2 frozen/firstlook results/graph_rank /tmp/graph_rank
+          test "$(gh run view 39055589643 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          test "$(gh run view 39055988705 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          test "$(gh run view 39056094950 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          gh run download 39055589643 --repo "$GITHUB_REPOSITORY" \
+            --name harmonized2026-cross-provider-native-identity-gate --dir frozen/v1
+          gh run download 39055988705 --repo "$GITHUB_REPOSITORY" \
+            --name harmonized2026-positive-only-prescore-v2-decision --dir frozen/v2
+          gh run download 39056094950 --repo "$GITHUB_REPOSITORY" \
+            --name harmonized2026-independent-firstlook-molecular-ranking --dir frozen/firstlook
+          test -s frozen/v1/feasibility.json
+          test -s frozen/v1/hard_queries.jsonl
+          test -s frozen/v1/reference_manifest.jsonl
+          test -s frozen/v2/feasibility.json
+          test -s frozen/firstlook/results.json
+          test -s frozen/firstlook/query_metrics.jsonl
+      - name: Retrieve identical source with native GNPS reference SMILES
+        run: |
+          set -euxo pipefail
+          curl -Lf --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 3000 \
+            'https://zenodo.org/records/20042904/files/combined-gnps-mass-spec-gym-npc-faithful.harmonized-subset.top128.mgf.zst?download=1' \
+            -o /tmp/graph_rank/source.mgf.zst
+          echo 'aee5a595960ef1284fe9977b6560a1ff771c07bb28c4a8e2e2ef47020b35724e  /tmp/graph_rank/source.mgf.zst' | sha256sum -c -
+      - name: Reproduce all original Hellinger ranks then evaluate fixed chemistry-conditioned model
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/benchmark_graph_conditioned_fragments_4398.py \
+            --source /tmp/graph_rank/source.mgf.zst \
+            --v1-dir frozen/v1 --v2-dir frozen/v2 \
+            --prior-dir frozen/firstlook --out results/graph_rank
+          cat results/graph_rank/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain all query rankings and failures, no cherry-picking
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: graph-fragment-4398-retrospective-native-chemistry
+          path: results/graph_rank/
+          retention-days: 90
+          if-no-files-found: warn
