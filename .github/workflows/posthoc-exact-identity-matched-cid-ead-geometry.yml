@@ -24,10 +24,12 @@ jobs:
           git diff --exit-code 4295a1ae7ead5f56a0d5b57a772cd651032d1362 -- \
             scripts/benchmark_multims2_third_source_geometry.py \
             scripts/benchmark_multims2_ead_lockbox.py \
-            scripts/benchmark_multims2_ead_positive_v2.py \
             src/qfd/target_blind_geometry.py \
             src/qfd/power_geometry.py \
             src/qfd/persistent_survival.py
+          git fetch --depth=1 origin d7130e3d6a3d72ef01387fd6262ac43afa618d7c
+          git diff --exit-code d7130e3d6a3d72ef01387fd6262ac43afa618d7c -- \
+            scripts/benchmark_multims2_ead_positive_v2.py
           python -m pip install -e '.[dev]'
           PYTHONPATH=src:. pytest -q
       - name: Download full original frozen scores only — no EAD raw peak rescoring
