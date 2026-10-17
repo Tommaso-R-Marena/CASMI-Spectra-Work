@@ -23,6 +23,13 @@ MIN_FORMULAS=20
 FIXED_MAX_PER_PRECURSOR_BUCKET=2
 
 
+def selection_key(row,salt):
+    # Whitelist native metadata fields: never hash arbitrary peak/answer fields.
+    safe={k:row[k] for k in ("index","source","inchikey","formula",
+                            "mode","precursor_mz")}
+    return stablehash(safe,salt)
+
+
 def freeze_reverse(rows):
     # Source and selection rules are flipped relative to the already scored
     # GNPS-reference / MassSpecGym-query cohort, before any peaks are read.
@@ -36,7 +43,7 @@ def freeze_reverse(rows):
     selected_refs=[]
     for k,members in sorted(by_bucket.items()):
         selected_refs.extend(sorted(
-            members,key=lambda r:stablehash(r,"reverse-MSG-ref-two-prescore-20261017")
+            members,key=lambda r:selection_key(r,"reverse-MSG-ref-two-prescore-20261017")
         )[:FIXED_MAX_PER_PRECURSOR_BUCKET])
     selected_refs.sort(key=lambda r:(r["index"]))
     ref_by_competition=defaultdict(list)
@@ -50,7 +57,7 @@ def freeze_reverse(rows):
     selected_queries=[]
     for _,members in sorted(original_query_groups.items()):
         selected_queries.append(min(
-            members,key=lambda r:stablehash(r,"reverse-GNPS-query-one-prescore-20261017")))
+            members,key=lambda r:selection_key(r,"reverse-GNPS-query-one-prescore-20261017")))
     eligible=[]
     before_hard=0
     for q in sorted(selected_queries,key=lambda x:(x["mode"],x["inchikey"],x["index"])):
