@@ -34,7 +34,7 @@ def test_1000_randomized_exact_factorization_identities():
         assert np.allclose(preds["quarter_factored"],
                            power_mean_distribution(x,y,t,.25),atol=1e-11)
         assert np.allclose(preds["shared_linear_exclusive_fourth"],
-                           support_only_suppression(x,y,t,power=4),atol=1e-11)
+                           support_only_suppression(x/x.sum(),y/y.sum(),t,power=4),atol=1e-11)
         assert np.allclose(preds["shared_hellinger_exclusive_fourth"],
                            persistent_hellinger_survival(x,y,t),atol=1e-11)
 
