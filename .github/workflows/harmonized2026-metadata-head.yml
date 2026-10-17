@@ -1,0 +1,46 @@
+name: harmonized2026-metadata-head-inspection
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/gnps-massspecgym-cross-library-lockbox-20261017]
+    paths:
+      - '.github/workflows/harmonized2026-metadata-head.yml'
+permissions:
+  contents: read
+jobs:
+  no-peak-first-header-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Read just first 1MB compressed and print original metadata keys only
+        run: |
+          python -m pip -q install zstandard
+          python - <<'PY'
+          import urllib.request,zstandard
+          url=("https://zenodo.org/records/20042904/files/"
+               "combined-gnps-mass-spec-gym-npc-faithful.harmonized-subset.top128.mgf.zst?download=1")
+          req=urllib.request.Request(url,headers={"Range":"bytes=0-1048575"})
+          with urllib.request.urlopen(req,timeout=100) as stream:
+              raw=stream.read(1048576)
+              print("HTTP",stream.status,"range",stream.headers.get("Content-Range"),
+                    "compressed prefix bytes",len(raw))
+          decompressed=zstandard.ZstdDecompressor().decompressobj().decompress(raw)
+          print("decompressed prefix bytes",len(decompressed))
+          lines=decompressed.decode("utf-8",errors="replace").splitlines()
+          records=[];item=None
+          for line in lines:
+              line=line.strip()
+              if line.upper()=="BEGIN IONS":item={}
+              elif line.upper()=="END IONS":
+                  if item:records.append(item)
+                  item=None
+              elif item is not None and "=" in line:
+                  k,v=line.split("=",1)
+                  if k.isidentifier():item[k]=v[:120]
+              if len(records)>=3:break
+          print("first 3 record METADATA ONLY",repr(records))
+          PY
