@@ -1,0 +1,81 @@
+name: phenolicsdb-posthoc-exact-support-factorization
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/phenolicsdb-support-mechanism-20261017]
+    paths:
+      - '.github/workflows/phenolicsdb-support-factor-audit.yml'
+      - 'src/qfd/support_factorization.py'
+      - 'scripts/audit_phenolicsdb_support_mechanism.py'
+      - 'tests/test_support_factorization.py'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  exact-mechanism-and-alignment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Full regression suite including exact identities
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Retrieve original scored cohorts and guard against altered history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/prior frozen/sources results/support_audit
+          test "$(gh run view 39048117682 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          gh run download 39048117682 --repo "$GITHUB_REPOSITORY" \
+            --name phenolicsdb-fourth-source-frozen-cid-result --dir frozen/prior
+          test -s frozen/prior/phenolicsdb_gate/feasibility.json
+          test -s frozen/prior/phenolicsdb_gate/frozen_quadruplets.jsonl
+          test -s frozen/prior/phenolicsdb_scores/query_scores.jsonl
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          path=Path("frozen/prior/phenolicsdb_scores/result.json")
+          j=json.loads(path.read_text())
+          assert j["status"]=="INDEPENDENT_PHENOLICSDB_FIXED_CID_POWER_TRANSFER"
+          assert j["all"]["n_queries"]==50
+          assert j["all"]["n_unique_structure_blocks"]==15
+          assert j["all"]["primary_transfer_confirmed"] is True
+          assert abs(j["all"]["primary_quarter_vs_hellinger"]["mean_delta"]-0.030097)<.000001
+          PY
+      - name: Re-acquire and pin BOTH original external laboratory source bytes
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 \
+            'https://raw.githubusercontent.com/CooperstoneLab/PhenolicsDB/381693c8435a851710953f6b818f6008e2227377/inst/extdata/PhenolicsDB/mgf/PhenolicsDB_Positive.mgf' \
+            -o frozen/sources/pos.mgf
+          curl -L --fail --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 \
+            'https://raw.githubusercontent.com/CooperstoneLab/PhenolicsDB/381693c8435a851710953f6b818f6008e2227377/inst/extdata/PhenolicsDB/mgf/PhenolicsDB_Negative.mgf' \
+            -o frozen/sources/neg.mgf
+          test "$(stat -c %s frozen/sources/pos.mgf)" = 137354
+          test "$(stat -c %s frozen/sources/neg.mgf)" = 169770
+          test "$(git hash-object frozen/sources/pos.mgf)" = 748ec688c8eeee952260189623275ff892aec1c9
+          test "$(git hash-object frozen/sources/neg.mgf)" = 19a4cb3a3afac23cc6637f03961aa1bf5ad5851e
+      - name: Reproduce every historical prediction, then test mechanism and tolerance sensitivity
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_phenolicsdb_support_mechanism.py \
+            --positive frozen/sources/pos.mgf \
+            --negative frozen/sources/neg.mgf \
+            --gate-dir frozen/prior/phenolicsdb_gate \
+            --baseline frozen/prior/phenolicsdb_scores/query_scores.jsonl \
+            --out results/support_audit
+          cat results/support_audit/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve results and any partial failure diagnostics
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phenolicsdb-exact-support-factorization-and-alignment-sensitivity
+          path: results/support_audit/
+          retention-days: 90
+          if-no-files-found: warn
