@@ -14,8 +14,9 @@ from pathlib import Path
 
 import numpy as np
 
-# The previously checked v2 adapter only fixes parsing of literal CID CE headers.
-import benchmark_multims2_third_source_geometry_v2  # noqa: F401
+# Importing the v2 adapter at MODULE import time would mutate the shared
+# CID header decoder and corrupt unrelated pytest modules. Activate the
+# fixed-energy adapter only when actually executing the isolated experiment.
 from benchmark_multims2_third_source_geometry import load_selected_source_spectra
 from benchmark_multims2_ead_lockbox import read_selected_spectra
 import audit_multims2_third_source_metadata as source
@@ -165,6 +166,7 @@ def evaluate(mgf: Path, gate_dir: Path, out: Path):
     ead_ids = {r["ead_indices"][role] for r in rows for role in ("low", "query", "high")}
     if cid_ids & ead_ids:
         raise RuntimeError("CID/EAD spectrum index collision")
+    import benchmark_multims2_third_source_geometry_v2  # noqa: F401
     cid_scans = load_selected_source_spectra(mgf, cid_ids)
     ead_scans = read_selected_spectra(mgf, ead_ids)
     groups = defaultdict(list)
