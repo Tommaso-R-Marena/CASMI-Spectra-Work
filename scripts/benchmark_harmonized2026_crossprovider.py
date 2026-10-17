@@ -224,9 +224,9 @@ def evaluate(source:Path,gate_dir:Path,out:Path):
         "limitations":"Computationally harmonized identities not independently curated; cross-library provenance not proof of independent physical acquisition; max two reference spectra per mass bucket; hypotheses selected after earlier unrelated sources, no universal collision-energy geometry result.",
     }
     out.mkdir(parents=True,exist_ok=True)
-    (out/"results.json").write_text(json.dumps(result,sort_keys=True,indent=2)+"\\n")
+    (out/"results.json").write_text(json.dumps(result,sort_keys=True,indent=2)+"\n")
     with (out/"query_metrics.jsonl").open("w") as f:
-        for row in scores:f.write(json.dumps(row,sort_keys=True)+"\\n")
+        for row in scores:f.write(json.dumps(row,sort_keys=True)+"\n")
     lines=[
       "# GNPS → MassSpecGym independent source-archive structure ranking",
       "",
@@ -246,8 +246,8 @@ def evaluate(source:Path,gate_dir:Path,out:Path):
     lines+=["",f"**Joint statistical success:** {statistical}.",
             f"**No exact-duplicate contamination and joint success:** {scientifically_qualified}.",
             "",result["limitations"],""]
-    (out/"report.md").write_text("\\n".join(lines))
-    print("\\n".join(lines))
+    (out/"report.md").write_text("\n".join(lines))
+    print("\n".join(lines))
     return result
 
 
