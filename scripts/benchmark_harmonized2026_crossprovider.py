@@ -162,7 +162,8 @@ def evaluate(source:Path,gate_dir:Path,v2_dir:Path,out:Path):
         or cov!=original["coverage"] or meta!=original["raw_header_audit"]):
         raise RuntimeError("frozen source native identity/candidate pool mismatch")
     queries=original_queries
-    if any(x["mode"]!="positive" for x in queries):\n        raise RuntimeError("positive-only V2 includes nonpositive queries")
+    if any(x["mode"]!="positive" for x in queries):
+        raise RuntimeError("positive-only V2 includes nonpositive queries")
     if not queries:raise RuntimeError("no genuinely competing chemical identities")
     needed={r["index"] for r in queries}
     needed.update(j for r in queries for j in r["selected_reference_indices"])
@@ -220,7 +221,10 @@ def evaluate(source:Path,gate_dir:Path,v2_dir:Path,out:Path):
     result={
         "status":"FIRST_LOOK_HARMONIZED2026_GNPS_TO_MSG_SAME_FORMULA_IDENTIFICATION",
         "source_doi":"10.5281/zenodo.20042904",
-        "source_sha256":SHA256,"no_train_or_tuning_on_new_source":True,\n        "original_two_polarity_gate_failed":True,\n        "new_positive_only_v2_prescore_gate_passed":True,\n        "scope_excludes_negative_ion_queries":True,
+        "source_sha256":SHA256,"no_train_or_tuning_on_new_source":True,
+        "original_two_polarity_gate_failed":True,
+        "new_positive_only_v2_prescore_gate_passed":True,
+        "scope_excludes_negative_ion_queries":True,
         "query_source":"MassSpecGym","reference_source":"GNPS",
         "study_scope":"cross-archive same-native-formula, same ion mode and precursor-matched structure ID, NOT new-lab acquisition or energy interpolation",
         "n_hard_queries":len(scores),
@@ -272,7 +276,8 @@ def evaluate(source:Path,gate_dir:Path,v2_dir:Path,out:Path):
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--zst",type=Path,required=True)
-    p.add_argument("--gate-dir",type=Path,required=True)\n    p.add_argument("--positive-v2-dir",type=Path,required=True)
+    p.add_argument("--gate-dir",type=Path,required=True)
+    p.add_argument("--positive-v2-dir",type=Path,required=True)
     p.add_argument("--out",type=Path,required=True)
     a=p.parse_args()
     evaluate(a.zst,a.gate_dir,a.positive_v2_dir,a.out)
