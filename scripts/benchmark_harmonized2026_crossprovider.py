@@ -240,7 +240,8 @@ def evaluate(source:Path,gate_dir:Path,v2_dir:Path,out:Path):
         "qualified_for_further_external_validation":scientifically_qualified,
         "by_polarity":{pol:{
             "n_queries":sum(x["polarity"]==pol for x in scores),
-            "mrr":{m:float(np.mean([x["metrics"][m]["mrr"] for x in scores if x["polarity"]==pol]))
+            "mrr":{m:(float(np.mean([x["metrics"][m]["mrr"] for x in scores if x["polarity"]==pol]))
+                      if any(x["polarity"]==pol for x in scores) else None)
                    for m in METHODS},
         } for pol in ("positive","negative")},
         "limitations":"Computationally harmonized identities not independently curated; cross-library provenance not proof of independent physical acquisition; max two reference spectra per mass bucket; hypotheses selected after earlier unrelated sources, no universal collision-energy geometry result.",
