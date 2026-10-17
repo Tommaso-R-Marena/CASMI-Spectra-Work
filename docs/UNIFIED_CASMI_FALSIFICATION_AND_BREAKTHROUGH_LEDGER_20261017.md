@@ -22,6 +22,7 @@ and are anchored to the specific completed GitHub Actions run.
 | GNPS→MassSpecGym firstlook structure retrieval | All 4,398 native same-formula hard queries | Hellinger MRR 0.811962, cosine 0.808541, composite 0.807687 | Composite-Hellinger ΔMRR −0.004275, prespecified Holm p=0.027319, negative | [39056094950](https://github.com/Tommaso-R-Marena/CASMI-Spectra-Work/actions/runs/39056094950) |
 | Conservative 2,254-formula audit | Same 4,398 frozen queries | Composite−Hellinger formula-cluster CI [−0.007768,−0.000791], exploratory p=0.015780 | Original negative persists after dependent candidate-pool cluster correction | [39056486479](https://github.com/Tommaso-R-Marena/CASMI-Spectra-Work/actions/runs/39056486479) |
 | Exact globally optimal peak assignment | Same 4,398, original 0.01 Da windows | Exact Hellinger MRR 0.811409 vs greedy 0.811962; formula-block CI [−0.001407,+0.000276], Holm p=0.352473 | Mathematical per-pair affinity improvement DOES NOT improve molecular ranking | [39057502565](https://github.com/Tommaso-R-Marena/CASMI-Spectra-Work/actions/runs/39057502565) |
+| Graph-conditioned native GNPS candidate fragments | Same 4,398 original hard queries, 2,254 native formulas | Fixed 90% Hellinger +10% graph MRR 0.813106 vs Hellinger 0.811962; formula-block CI [+0.000123,+0.002258], retrospective p=0.032019; fractional top1 0.707360 vs 0.707398 | Small posthoc MRR positive signal but NO top-1 gain; multiple earlier ideas tested, NO independent confirmation | [39058512753](https://github.com/Tommaso-R-Marena/CASMI-Spectra-Work/actions/runs/39058512753) |
 
 ## General exact mathematical limitations
 
@@ -47,6 +48,15 @@ and are anchored to the specific completed GitHub Actions run.
    status is UNKNOWN, not disproved.
 
 ## Current experimental continuation — graph-conditioned chemistry
+
+**Status:** full original retrospective benchmark completed and fixed. The
+exact model for any genuinely independent replication is anchored at commit
+`64aced60540b5d57e191ff0ead73b445c71e1732`; source outcome run
+[39058512753](https://github.com/Tommaso-R-Marena/CASMI-Spectra-Work/actions/runs/39058512753).
+The nominal positive MRR result cannot be interpreted as a prospective
+replication or a top-1 identification gain; see
+`docs/PROSPECTIVE_EXTERNAL_LAB_BREAKTHROUGH_VALIDATION_CONTRACT_20261017.md`.
+
 
 Versioned study in `docs/GRAPH_CONDITIONED_FRAGMENT_RANKING_PROTOCOL_20261017.md`.
 
