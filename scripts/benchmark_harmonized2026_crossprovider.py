@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter,defaultdict
 import io
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -125,26 +126,43 @@ def read_rows(path):
     return [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
 
 
-def evaluate(source:Path,gate_dir:Path,out:Path):
+def evaluate(source:Path,gate_dir:Path,v2_dir:Path,out:Path):
     original=json.loads((gate_dir/"feasibility.json").read_text())
     original_reference=read_rows(gate_dir/"reference_manifest.jsonl")
     original_queries=read_rows(gate_dir/"hard_queries.jsonl")
+    v2=json.loads((v2_dir/"feasibility.json").read_text())
+    def digest(f):return hashlib.sha256(f.read_bytes()).hexdigest()
+    # The original TWO-POLARITY scientific gate failed and MUST remain
+    # failed. Positive-only V2 was separately recorded BEFORE peak outcomes.
     if (original.get("status")!="HARMONIZED2026_CROSS_PROVIDER_NATIVE_HEADER_GATE_V1"
-        or original.get("gate_pass") is not True
+        or original.get("gate_pass") is not False
         or original.get("source_sha256")!=SHA256 or original.get("source_md5")!=MD5
         or original.get("query_peak_locations_or_intensities_opened") is not False
         or original.get("gnps_reference_peaks_opened") is not False
-        or len(original_queries)!=original.get("coverage",{}).get("hard_queries",0)):
-        raise RuntimeError("original metadata-only gate not passed; NO peaks authorized")
+        or original.get("coverage",{}).get("hard_negative",0)!=0
+        or original.get("coverage",{}).get("hard_positive")!=4398
+        or len(original_queries)!=4398
+        or v2.get("status")!="HARMONIZED2026_POSITIVE_ONLY_NATIVE_COHORT_V2"
+        or v2.get("gate_pass") is not True
+        or v2.get("source_sha256")!=SHA256
+        or v2.get("original_v1_two_polarity_scientific_pass") is not False
+        or v2.get("source_query_spectra_opened") is not False
+        or v2.get("source_candidate_spectra_opened") is not False
+        or v2.get("original_v1_feasibility_sha256")!=digest(gate_dir/"feasibility.json")
+        or v2.get("original_v1_queries_sha256")!=digest(gate_dir/"hard_queries.jsonl")
+        or v2.get("original_v1_reference_sha256")!=digest(gate_dir/"reference_manifest.jsonl")
+        or len(original_queries)!=v2.get("coverage",{}).get("positive_hard_queries")):
+        raise RuntimeError("original V1 failed or positive-only V2 not separately approved; no peaks")
     sha256file(source)
     # REPLAY native header-only gate first. Missing or changed checksum,
     # identity, candidate or query selection MUST ABORT before peak parsing.
     rows,meta=meta_only(source)
     refs,queries,cov,passed=freeze(rows)
-    if (not passed or refs!=original_reference or queries!=original_queries
+    if (passed or refs!=original_reference or queries!=original_queries
         or cov!=original["coverage"] or meta!=original["raw_header_audit"]):
         raise RuntimeError("frozen source native identity/candidate pool mismatch")
     queries=original_queries
+    if any(x["mode"]!="positive" for x in queries):\n        raise RuntimeError("positive-only V2 includes nonpositive queries")
     if not queries:raise RuntimeError("no genuinely competing chemical identities")
     needed={r["index"] for r in queries}
     needed.update(j for r in queries for j in r["selected_reference_indices"])
@@ -202,7 +220,7 @@ def evaluate(source:Path,gate_dir:Path,out:Path):
     result={
         "status":"FIRST_LOOK_HARMONIZED2026_GNPS_TO_MSG_SAME_FORMULA_IDENTIFICATION",
         "source_doi":"10.5281/zenodo.20042904",
-        "source_sha256":SHA256,"no_train_or_tuning_on_new_source":True,
+        "source_sha256":SHA256,"no_train_or_tuning_on_new_source":True,\n        "original_two_polarity_gate_failed":True,\n        "new_positive_only_v2_prescore_gate_passed":True,\n        "scope_excludes_negative_ion_queries":True,
         "query_source":"MassSpecGym","reference_source":"GNPS",
         "study_scope":"cross-archive same-native-formula, same ion mode and precursor-matched structure ID, NOT new-lab acquisition or energy interpolation",
         "n_hard_queries":len(scores),
@@ -254,10 +272,10 @@ def evaluate(source:Path,gate_dir:Path,out:Path):
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--zst",type=Path,required=True)
-    p.add_argument("--gate-dir",type=Path,required=True)
+    p.add_argument("--gate-dir",type=Path,required=True)\n    p.add_argument("--positive-v2-dir",type=Path,required=True)
     p.add_argument("--out",type=Path,required=True)
     a=p.parse_args()
-    evaluate(a.zst,a.gate_dir,a.out)
+    evaluate(a.zst,a.gate_dir,a.positive_v2_dir,a.out)
 
 
 if __name__=="__main__":main()
