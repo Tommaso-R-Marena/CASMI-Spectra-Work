@@ -48,7 +48,7 @@ jobs:
             --name expolib-v1-independent-nominal-CE-transfer --dir frozen/expo
           gh run download 38970610885 --repo "$GITHUB_REPOSITORY" \
             --name multims2-third-independent-source-frozen-geometry --dir frozen/multi
-          echo '2c973a7b83c1a48f95f923107ee72bb44a2a95f7d7da403f9d662efc8b  frozen/mb/rows.jsonl' | sha256sum -c -
+          echo '2c973a7b83c1a48f95f923107ee72bb44a2a95f7d7da403f9d6f541d662efc8b  frozen/mb/rows.jsonl' | sha256sum -c -
           echo 'f85b67d61be82f62ee1072944f9d300eb2d1d81462eba6ad221566dfaa276695  frozen/expo/rows.jsonl' | sha256sum -c -
           echo 'f97bfaee05e9197cdaa96ad995ab9019c995274820ff57f3b04bd04de12c2be6  frozen/multi/rows.jsonl' | sha256sum -c -
       - name: Compare actual query-aware oracle against nongeometric support-only path
