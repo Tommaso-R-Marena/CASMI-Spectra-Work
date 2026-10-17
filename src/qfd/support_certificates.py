@@ -104,3 +104,22 @@ def certify_top1_unchanged(baseline_scores:Mapping[str,float],
             "smallest_score_margin":margin,
             "largest_pairwise_required_margin":max_required,
             "status":"PROVED_STABLE" if safe else "UNKNOWN_NOT_PROVED"}
+
+
+
+def distribution_affinity_difference_upper(p,q)->float:
+    """Uniformly bound |BC(target,p)-BC(target,q)| for ANY target.
+
+    For normalized distributions p and q and any query subdistribution
+    (including unmatched measured intensity), Cauchy-Schwarz gives
+    |<sqrt(target),sqrt(p)-sqrt(q)>| <= ||sqrt(p)-sqrt(q)||_2.
+    No target is required to compute the bound.
+    """
+    x=np.asarray(p,float);y=np.asarray(q,float)
+    if (x.ndim!=1 or not len(x) or x.shape!=y.shape
+        or not np.isfinite(x).all() or not np.isfinite(y).all()
+        or np.any(x<0) or np.any(y<0)
+        or not np.isclose(x.sum(),1,atol=1e-9)
+        or not np.isclose(y.sum(),1,atol=1e-9)):
+        raise ValueError("two finite normalized prediction distributions required")
+    return float(min(1.,np.linalg.norm(np.sqrt(x)-np.sqrt(y))))
