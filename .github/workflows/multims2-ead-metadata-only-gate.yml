@@ -1,0 +1,101 @@
+name: multims2-ead-metadata-only-gate
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/multims2-ead-mechanism-lockbox-20261016]
+    paths:
+      - '.github/workflows/multims2-ead-metadata-only-gate.yml'
+permissions:
+  contents: read
+  actions: read
+env:
+  PROTOCOL_FROZEN_SHA: 4295a1ae7ead5f56a0d5b57a772cd651032d1362
+jobs:
+  ead-header-feasibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify freeze before opening EAD query spectra
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin "$PROTOCOL_FROZEN_SHA"
+          git diff --exit-code "$PROTOCOL_FROZEN_SHA" -- \
+            scripts/audit_multims2_ead_metadata.py \
+            scripts/benchmark_multims2_ead_lockbox.py \
+            src/qfd/persistent_survival.py \
+            tests/test_persistent_survival.py \
+            docs/MULTIMS2_EAD_HYBRID_LOCKBOX_PROTOCOL_20261016.md
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Obtain cryptographically pinned prior-source identity inventories
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/prior frozen/mb frozen/expo frozen/cid /tmp/ead results/ead_metadata
+          gh run download 38934839645 --repo "$GITHUB_REPOSITORY" \
+            --name posthoc-massbank-structure-nonoverlap-and-source-robustness --dir frozen/prior
+          gh run download 38918658343 --repo "$GITHUB_REPOSITORY" \
+            --name massbank-2026-03-frozen-external-efficacy --dir frozen/mb
+          gh run download 38964190641 --repo "$GITHUB_REPOSITORY" \
+            --name expolib-v1-independent-header-only-feasibility --dir frozen/expo
+          gh run download 38970318925 --repo "$GITHUB_REPOSITORY" \
+            --name multims2-third-source-metadata-v2-fixed-brackets --dir frozen/cid
+          echo '5520ecb3f134290953fd5ad63b97cc1561dd39c2ea658aeaf4a90b2be348d07a  frozen/prior/prior_evaluated_key_inventory.json' | sha256sum -c -
+          echo '265dfb75e33d2eff3f19945255bddb5db0c0f7f9161593ada80cd2b50ecac9c4  frozen/mb/label_free_triplets.jsonl' | sha256sum -c -
+          echo '095340d967b177077ce517da7aa332795ce691899cc1320563cce07a76a68560  frozen/expo/nominal_energy_triplets.jsonl' | sha256sum -c -
+          echo '5345f532ded9baa4134d38b840a6e05a1b1f85b3cf19923569ea80d96f46289d  frozen/cid/frozen_triplets.jsonl' | sha256sum -c -
+      - name: Download original discovery key inventory source unchanged
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 6 --retry-all-errors --retry-delay 4 --connect-timeout 30 --max-time 1500 \
+            'https://zenodo.org/records/21105617/files/20241003_mcebio_pos_ms2.json?download=1' \
+            -o /tmp/ead/original_discovery.json
+          echo '806f33c9c60af74a0aa21fb66aeb84f3  /tmp/ead/original_discovery.json' | md5sum -c -
+      - name: Download same exact published 77MB MultiMS2 source without reading peaks
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 6 --retry-all-errors --retry-delay 4 --connect-timeout 30 --max-time 2400 \
+            'https://raw.githubusercontent.com/zamboni-lab/MultiMS2/659bd9b608408a75ecbb4b03295ed4c03ba52539/data/multims2_spectra.mgf' \
+            -o /tmp/ead/source.mgf
+          test "$(stat -c '%s' /tmp/ead/source.mgf)" = 77183510
+          echo '4ef86f75a12ad2fdadbd63732e2d6690f4e506a6ff08f171758c1808d1249673  /tmp/ead/source.mgf' | sha256sum -c -
+      - name: EAD STRICT HEADER ONLY metadata gate no EAD 16eV target intensity reads
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_multims2_ead_metadata.py \
+            --mgf /tmp/ead/source.mgf \
+            --discovery /tmp/ead/original_discovery.json \
+            --prior-inventory frozen/prior/prior_evaluated_key_inventory.json \
+            --massbank-manifest frozen/mb/label_free_triplets.jsonl \
+            --expolib-manifest frozen/expo/nominal_energy_triplets.jsonl \
+            --cid-manifest frozen/cid/frozen_triplets.jsonl \
+            --out results/ead_metadata
+          cat results/ead_metadata/feasibility.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve freeze and gate scientific provenance even if gate fails
+        if: always()
+        run: |
+          mkdir -p results/ead_metadata
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          payload={
+            "status":"EAD HEADER ONLY METADATA GATE — NO TARGET-PEAK INTENSITY SCORING",
+            "protocol_frozen_sha":os.environ["PROTOCOL_FROZEN_SHA"],
+            "workflow_sha":os.getenv("GITHUB_SHA"),
+            "source_sha256":"4ef86f75a12ad2fdadbd63732e2d6690f4e506a6ff08f171758c1808d1249673",
+            "new_predictor_scores_opened":False,
+          }
+          Path("results/ead_metadata/provenance.json").write_text(json.dumps(payload,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: multims2-ead-header-only-frozen-feasibility
+          path: results/ead_metadata/
+          retention-days: 90
+          if-no-files-found: warn
