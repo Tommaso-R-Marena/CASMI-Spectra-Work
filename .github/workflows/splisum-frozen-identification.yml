@@ -1,0 +1,97 @@
+name: splisum-2026-fifth-origin-frozen-molecular-identification
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/splisum-fifth-origin-molecular-retrieval-20261017]
+    paths:
+      - '.github/workflows/splisum-frozen-identification.yml'
+      - 'scripts/benchmark_splisum_native_identification.py'
+      - 'tests/test_splisum_native_identification.py'
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  external-native-identity-mrr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify entire previous research suite plus new ranking regressions
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Reuse BEFORE-PEAK original fifth-source metadata gate
+        id: eligibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/splisum_gate results/splisum_identification
+          test "$(gh run view 39054508690 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          gh run download 39054508690 --repo "$GITHUB_REPOSITORY" \
+            --name splisum-2026-native-identity-header-only-gate --dir frozen/splisum_gate
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path('frozen/splisum_gate/feasibility.json')
+          if not p.exists():
+              raise RuntimeError("original source gate artifact missing; no target reads authorized")
+          j=json.loads(p.read_text())
+          if (j["status"]!="SPLISUM_2026_FIFTH_ORIGIN_HEADER_ONLY_GATE_V1"
+              or j["query_fragment_mass_values_or_intensities_opened"] is not False):
+              raise RuntimeError("unaltered metadata-only gate required")
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('passed='+str(j['gate_pass']).lower()+'\n')
+          if not j['gate_pass']:
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+                  f.write('**Scientific gate failed. No query/reference peak data were opened.**\n')
+          PY
+      - name: Download identical native v2 source with MD5 integrity
+        if: steps.eligibility.outputs.passed == 'true'
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/splisum_replay
+          url='https://zenodo.org/records/19834896/files'
+          curl -L -f --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 2700 "$url/Query_INT_positive_20ev.mgf?download=1" \
+            -o /tmp/splisum_replay/qpos.mgf
+          curl -L -f --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 2700 "$url/Query_INT_negative_20ev.mgf?download=1" \
+            -o /tmp/splisum_replay/qneg.mgf
+          curl -L -f --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 2700 "$url/TARGET_20ev_positive.mgf?download=1" \
+            -o /tmp/splisum_replay/tpos.mgf
+          curl -L -f --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 2700 "$url/TARGET_20ev_negative.mgf?download=1" \
+            -o /tmp/splisum_replay/tneg.mgf
+          cd /tmp/splisum_replay
+          printf '%s\n' \
+            '3142dab3cd679611d0f0d50b95f248ca  qpos.mgf' \
+            'dce2f8f93746fb859c19ae798cf9306f  qneg.mgf' \
+            '1675977e3d76d5f1b0ada7e5968ee95d  tpos.mgf' \
+            'ab73102f4a2e008cc2db606f6c144ed5  tneg.mgf' | md5sum -c -
+      - name: Evaluate every frozen hard-candidate query without fitting
+        if: steps.eligibility.outputs.passed == 'true'
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/benchmark_splisum_native_identification.py \
+            --qpos /tmp/splisum_replay/qpos.mgf \
+            --qneg /tmp/splisum_replay/qneg.mgf \
+            --tpos /tmp/splisum_replay/tpos.mgf \
+            --tneg /tmp/splisum_replay/tneg.mgf \
+            --gate-dir frozen/splisum_gate \
+            --out results/splisum_identification
+          cat results/splisum_identification/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish derived results only, including unmodified scientific failures
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: splisum-native-molecular-ranking-frozen-benchmarks
+          path: results/splisum_identification/
+          if-no-files-found: warn
+          retention-days: 90
