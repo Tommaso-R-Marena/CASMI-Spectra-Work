@@ -1,0 +1,62 @@
+name: gnps-msg-entropy-reference-rarity-strong-control
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/spectral-entropy-vs-reference-rarity-20261017]
+    paths:
+      - 'scripts/benchmark_harmonized2026_entropy_control.py'
+      - 'tests/test_harmonized2026_entropy_control.py'
+      - 'docs/GNPS_MSG_ENTROPY_JOINT_STRONGER_CONTROL_20261017.md'
+      - '.github/workflows/gnps-msg-entropy-reference-rarity-strong-control.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  test-stronger-spectral-entropy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: All original plus reference rarity and entropy exact JSD tests
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]' zstandard
+          PYTHONPATH=src:. pytest -q
+      - name: Obtain historical unchanged GNPS and MSG original metadata gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/original frozen/v2 results/entropy_vs_rarity
+          test "$(gh run view 39055589643 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          test "$(gh run view 39055988705 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          gh run download 39055589643 --repo "$GITHUB_REPOSITORY" --name harmonized2026-cross-provider-native-identity-gate --dir frozen/original
+          gh run download 39055988705 --repo "$GITHUB_REPOSITORY" --name harmonized2026-positive-only-prescore-v2-decision --dir frozen/v2
+      - name: Retrieve byte identical original source and enforce SHA256
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/gnps_entropy
+          curl -Lf --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 3000 \
+            'https://zenodo.org/records/20042904/files/combined-gnps-mass-spec-gym-npc-faithful.harmonized-subset.top128.mgf.zst?download=1' \
+            -o /tmp/gnps_entropy/source.mgf.zst
+          echo 'aee5a595960ef1284fe9977b6560a1ff771c07bb28c4a8e2e2ef47020b35724e  /tmp/gnps_entropy/source.mgf.zst' | sha256sum -c -
+      - name: Complete frozen score and formula-block joint baseline contrasts
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/benchmark_harmonized2026_entropy_control.py \
+            --zst /tmp/gnps_entropy/source.mgf.zst \
+            --gate-dir frozen/original --positive-v2-dir frozen/v2 \
+            --out results/entropy_vs_rarity
+          cat results/entropy_vs_rarity/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve full query-level ranks and all results including null/failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnps-msg-entropy-vs-rarity-joint-baseline-control
+          path: results/entropy_vs_rarity/
+          retention-days: 90
+          if-no-files-found: warn
