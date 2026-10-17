@@ -32,7 +32,7 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p frozen/splisum_gate results/splisum_identification
-          test "$(gh run view 39054508690 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          # Branch-specific research workflows cannot use workflow_run unless the\n          # workflow definition lives on the default branch. Therefore this\n          # scoring run MUST await successful completion of the earlier gate.\n          gh run watch 39054508690 --repo "$GITHUB_REPOSITORY" --exit-status\n          test "$(gh run view 39054508690 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
           gh run download 39054508690 --repo "$GITHUB_REPOSITORY" \
             --name splisum-2026-native-identity-header-only-gate --dir frozen/splisum_gate
           python - <<'PY'
