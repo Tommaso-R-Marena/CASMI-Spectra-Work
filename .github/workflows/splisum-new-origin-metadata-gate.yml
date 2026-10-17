@@ -1,0 +1,84 @@
+name: splisum-new-origin-metadata-only-identity-gate
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/splisum-fifth-origin-molecular-retrieval-20261017]
+    paths:
+      - '.github/workflows/splisum-new-origin-metadata-gate.yml'
+      - 'scripts/audit_splisum_header_gate.py'
+      - 'tests/test_splisum_header_gate.py'
+permissions:
+  contents: read
+jobs:
+  fifth-source-native-identity-eligibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run comprehensive frozen prior regressions and new blindfold guards
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Acquire all original independent corpus inputs at exact immutable Zenodo record
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/splisum_source results/splisum_gate
+          url='https://zenodo.org/records/19834896/files'
+          curl -L -f --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 2700 "$url/Query_INT_positive_20ev.mgf?download=1" \
+            -o /tmp/splisum_source/qpos.mgf
+          curl -L -f --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 2700 "$url/Query_INT_negative_20ev.mgf?download=1" \
+            -o /tmp/splisum_source/qneg.mgf
+          curl -L -f --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 2700 "$url/TARGET_20ev_positive.mgf?download=1" \
+            -o /tmp/splisum_source/tpos.mgf
+          curl -L -f --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 2700 "$url/TARGET_20ev_negative.mgf?download=1" \
+            -o /tmp/splisum_source/tneg.mgf
+          cd /tmp/splisum_source
+          printf '%s\n' \
+            '3142dab3cd679611d0f0d50b95f248ca  qpos.mgf' \
+            'dce2f8f93746fb859c19ae798cf9306f  qneg.mgf' \
+            '1675977e3d76d5f1b0ada7e5968ee95d  tpos.mgf' \
+            'ab73102f4a2e008cc2db606f6c144ed5  tneg.mgf' | md5sum -c -
+      - name: Read ONLY native MGF headers — no scoring or peak m/z/intensity parsing
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_splisum_header_gate.py \
+            --qpos /tmp/splisum_source/qpos.mgf \
+            --qneg /tmp/splisum_source/qneg.mgf \
+            --tpos /tmp/splisum_source/tpos.mgf \
+            --tneg /tmp/splisum_source/tneg.mgf \
+            --out results/splisum_gate
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads(Path('results/splisum_gate/feasibility.json').read_text())
+          c=r['coverage']
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('## SPLISUM frozen new-source NATIVE-IDENTITY feasibility\n\n')
+              f.write(f"- Gate: **{'PASS' if r['gate_pass'] else 'FAIL'}**\n")
+              f.write(f"- Query structures meeting strict native identity/mass candidate matching: "
+                      f"{c['distinct_evaluable_structures']}\n")
+              f.write(f"- Eligible queries: {c['evaluable_queries']}\n")
+              f.write(f"- With >=2 distinct 20-eV candidate structures: {c['isomer_or_isobar_queries']}\n")
+              for k,v in r['polarity'].items():
+                  f.write(f"- {k}: {v['query_total']} source queries, "
+                          f"{v['query_with_identity_and_mass']} have usable metadata, "
+                          f"{v['query_true_label_in_mass_pool']} target-contained\n")
+              if not r['gate_pass']:
+                  f.write('\nFAIL CLOSED: no source/query peak values read or scored.\n')
+          PY
+      - name: Always preserve metadata and negative feasibility outcomes, never raw MGF
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: splisum-2026-native-identity-header-only-gate
+          path: results/splisum_gate/
+          if-no-files-found: warn
+          retention-days: 90
