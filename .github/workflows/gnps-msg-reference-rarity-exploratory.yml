@@ -1,0 +1,62 @@
+name: gnps-msg-reference-rarity-exploratory
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/reference-rarity-formula-block-validation-20261017]
+    paths:
+      - 'scripts/benchmark_harmonized2026_reference_rarity.py'
+      - 'tests/test_harmonized2026_reference_rarity.py'
+      - 'docs/GNPS_MSG_REFERENCE_RARITY_FROZEN_EXPLORATORY_20261017.md'
+      - '.github/workflows/gnps-msg-reference-rarity-exploratory.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  formula-block-rarity-experiment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Original CASMI plus rarity scientific unit tests
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]' zstandard
+          PYTHONPATH=src:. pytest -q
+      - name: Retrieve historical frozen failed V1 and passed V2 metadata gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/original frozen/v2 results/reference_rarity
+          test "$(gh run view 39055589643 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          test "$(gh run view 39055988705 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          gh run download 39055589643 --repo "$GITHUB_REPOSITORY" --name harmonized2026-cross-provider-native-identity-gate --dir frozen/original
+          gh run download 39055988705 --repo "$GITHUB_REPOSITORY" --name harmonized2026-positive-only-prescore-v2-decision --dir frozen/v2
+      - name: Download identical immutable original source
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/gnps_rarity
+          curl -Lf --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 3000 \
+            'https://zenodo.org/records/20042904/files/combined-gnps-mass-spec-gym-npc-faithful.harmonized-subset.top128.mgf.zst?download=1' \
+            -o /tmp/gnps_rarity/source.mgf.zst
+          echo 'aee5a595960ef1284fe9977b6560a1ff771c07bb28c4a8e2e2ef47020b35724e  /tmp/gnps_rarity/source.mgf.zst' | sha256sum -c -
+      - name: Reverify frozen cohorts and score actual formula-conditional rarity
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/benchmark_harmonized2026_reference_rarity.py \
+            --zst /tmp/gnps_rarity/source.mgf.zst \
+            --gate-dir frozen/original --positive-v2-dir frozen/v2 \
+            --out results/reference_rarity
+          cat results/reference_rarity/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish original replay and all new results including scientific failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnps-msg-exploratory-reference-rarity-v1
+          path: results/reference_rarity/
+          retention-days: 90
+          if-no-files-found: warn
