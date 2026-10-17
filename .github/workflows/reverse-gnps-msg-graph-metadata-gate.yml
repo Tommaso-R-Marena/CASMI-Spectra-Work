@@ -1,0 +1,60 @@
+name: reverse-gnps-msg-graph-metadata-only-gate
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/reverse-gnps-msg-graph-transfer-20261017]
+    paths:
+      - '.github/workflows/reverse-gnps-msg-graph-metadata-gate.yml'
+      - 'scripts/audit_reverse_gnps_msg_graph_gate.py'
+      - 'tests/test_reverse_gnps_msg_graph_gate.py'
+      - 'docs/REVERSE_GNPS_MSG_GRAPH_TRANSFER_PROTOCOL_20261017.md'
+permissions:
+  contents: read
+jobs:
+  prescore-no-peaks-feasibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Complete original QFD plus reverse-provider selection tests
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]' zstandard
+          PYTHONPATH=src:. pytest -q
+      - name: Download byte-identical source before ANY metadata scan
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/reverse_gnps_msg results/reverse_gnps_msg_metadata
+          curl -Lf --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 3000 \
+            'https://zenodo.org/records/20042904/files/combined-gnps-mass-spec-gym-npc-faithful.harmonized-subset.top128.mgf.zst?download=1' \
+            -o /tmp/reverse_gnps_msg/source.mgf.zst
+          echo 'aee5a595960ef1284fe9977b6560a1ff771c07bb28c4a8e2e2ef47020b35724e  /tmp/reverse_gnps_msg/source.mgf.zst' | sha256sum -c -
+      - name: Freeze all native source headers without reading fragment intensity values
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_reverse_gnps_msg_graph_gate.py \
+            --source /tmp/reverse_gnps_msg/source.mgf.zst \
+            --out results/reverse_gnps_msg_metadata
+          python - <<'PY'
+          from pathlib import Path
+          import json,os
+          j=json.loads(Path('results/reverse_gnps_msg_metadata/feasibility.json').read_text())
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('## Reverse provider prescore / no fragment data opened\n\n')
+              f.write('**Scientific feasibility '+('PASS' if j['gate_pass'] else 'FAIL')+'**\n\n')
+              for k,v in j['coverage'].items():
+                  f.write('- '+k+': '+str(v)+'\n')
+              f.write('\nNo fragment m/z intensities scored. If failed, no scorer may proceed.\n')
+          PY
+      - name: Publish full locked cohort and scientific metadata failure if any
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reverse-gnps-msg-graph-native-metadata-lockbox-v1
+          path: results/reverse_gnps_msg_metadata/
+          retention-days: 90
+          if-no-files-found: warn

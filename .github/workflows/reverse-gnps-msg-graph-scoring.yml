@@ -1,0 +1,79 @@
+name: reverse-gnps-msg-graph-scientific-transfer-2651
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/reverse-gnps-msg-graph-transfer-20261017]
+    paths:
+      - '.github/workflows/reverse-gnps-msg-graph-scoring.yml'
+      - 'scripts/benchmark_reverse_gnps_msg_graph_transfer.py'
+      - 'tests/test_reverse_gnps_msg_graph_transfer.py'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  frozen-native-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Full inherited graph/science suite including reverse scorer checks
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]' zstandard
+          PYTHONPATH=src:. pytest -q
+      - name: Retrieve EXACT COMPLETED pre-score metadata-only gate (must pass scientifically)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/reverse_metadata results/reverse_transfer /tmp/reverse_transfer
+          test "$(gh run view 39059171589 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          gh run download 39059171589 --repo "$GITHUB_REPOSITORY" \
+            --name reverse-gnps-msg-graph-native-metadata-lockbox-v1 \
+            --dir frozen/reverse_metadata
+          test -s frozen/reverse_metadata/feasibility.json
+          test -s frozen/reverse_metadata/reference_manifest.jsonl
+          test -s frozen/reverse_metadata/hard_queries.jsonl
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          a=json.loads(Path('frozen/reverse_metadata/feasibility.json').read_text())
+          c=a['coverage']
+          assert a['status']=='REVERSE_PROVIDER_NATIVE_HEADER_LOCKBOX_20261017_V1'
+          assert a['gate_pass'] is True
+          assert a['query_peak_positions_or_intensities_read'] is False
+          assert a['reference_peak_positions_or_intensities_read'] is False
+          assert a['query_smiles_read'] is False
+          assert c['hard_queries']==2651
+          assert c['hard_query_negative']==0
+          assert c['hard_query_positive']==2651
+          assert c['distinct_native_formulas']==1256
+          assert c['hard_structure_truths']==2651
+          PY
+      - name: Download exactly the locked 2026 original source; verify SHA256
+        run: |
+          set -euxo pipefail
+          curl -Lf --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 3000 \
+            'https://zenodo.org/records/20042904/files/combined-gnps-mass-spec-gym-npc-faithful.harmonized-subset.top128.mgf.zst?download=1' \
+            -o /tmp/reverse_transfer/source.mgf.zst
+          echo 'aee5a595960ef1284fe9977b6560a1ff771c07bb28c4a8e2e2ef47020b35724e  /tmp/reverse_transfer/source.mgf.zst' | sha256sum -c -
+      - name: Replay native header lockbox before fragment scoring and assess frozen graph model
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/benchmark_reverse_gnps_msg_graph_transfer.py \
+            --source /tmp/reverse_transfer/source.mgf.zst \
+            --locked frozen/reverse_metadata \
+            --out results/reverse_transfer
+          cat results/reverse_transfer/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve complete positive or negative scientific report and query ranks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reverse-gnps-msg-fixed-graph-2651-scientific-transfer
+          path: results/reverse_transfer/
+          retention-days: 90
+          if-no-files-found: warn
