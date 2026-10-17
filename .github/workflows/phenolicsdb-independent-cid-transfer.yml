@@ -1,0 +1,86 @@
+name: phenolicsdb-independent-fourth-source-cid-transfer
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/phenolicsdb-independent-cid-transfer-20261017]
+    paths:
+      - '.github/workflows/phenolicsdb-independent-cid-transfer.yml'
+      - 'scripts/audit_phenolicsdb_independent_gate.py'
+      - 'scripts/benchmark_phenolicsdb_independent_cid.py'
+      - 'tests/test_phenolicsdb_independent_cid.py'
+permissions:
+  contents: read
+
+jobs:
+  independent-phenolicsdb-cid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test all established scorers and fourth-source guardrails
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Download two original source MGFs from exact upstream historical commit
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/phenolicsdb results/phenolicsdb_gate results/phenolicsdb_scores
+          curl -L --fail --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 \
+            'https://raw.githubusercontent.com/CooperstoneLab/PhenolicsDB/381693c8435a851710953f6b818f6008e2227377/inst/extdata/PhenolicsDB/mgf/PhenolicsDB_Positive.mgf' \
+            -o frozen/phenolicsdb/pos.mgf
+          curl -L --fail --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 \
+            'https://raw.githubusercontent.com/CooperstoneLab/PhenolicsDB/381693c8435a851710953f6b818f6008e2227377/inst/extdata/PhenolicsDB/mgf/PhenolicsDB_Negative.mgf' \
+            -o frozen/phenolicsdb/neg.mgf
+          test "$(stat -c %s frozen/phenolicsdb/pos.mgf)" = 137354
+          test "$(stat -c %s frozen/phenolicsdb/neg.mgf)" = 169770
+          test "$(git hash-object frozen/phenolicsdb/pos.mgf)" = 748ec688c8eeee952260189623275ff892aec1c9
+          test "$(git hash-object frozen/phenolicsdb/neg.mgf)" = 19a4cb3a3afac23cc6637f03961aa1bf5ad5851e
+      - name: Metadata only — freeze entire exact identity/polarity eligible cohort
+        id: gate
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_phenolicsdb_independent_gate.py \
+            --positive frozen/phenolicsdb/pos.mgf \
+            --negative frozen/phenolicsdb/neg.mgf \
+            --out results/phenolicsdb_gate
+          python - <<'PY'
+          from pathlib import Path
+          import json, os
+          p=json.loads(Path("results/phenolicsdb_gate/feasibility.json").read_text())
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"passed={str(p['gate_pass']).lower()}\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as out:
+              c=p["coverage"]
+              out.write("### Independent fourth source: HEADER-ONLY feasibility\n\n")
+              out.write(f"Complete CID 20/40/60/80 groups: "
+                        f"+ {c['positive_quadruplets']}, - {c['negative_quadruplets']}; "
+                        f"full identity blocks: {c['distinct_structures']}, "
+                        f"unopened target queries: {c['target_queries']}.\n\n")
+              out.write(f"Scientific metadata gate **{'PASS' if p['gate_pass'] else 'FAIL'}**.\n\n")
+              if not p["gate_pass"]:
+                  out.write("FAIL CLOSED: no target spectra scored.\n")
+          PY
+      - name: Open ONLY gated target/reference scans and score every selected energy triplet
+        if: steps.gate.outputs.passed == 'true'
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/benchmark_phenolicsdb_independent_cid.py \
+            --positive frozen/phenolicsdb/pos.mgf \
+            --negative frozen/phenolicsdb/neg.mgf \
+            --gate-dir results/phenolicsdb_gate \
+            --out results/phenolicsdb_scores
+          cat results/phenolicsdb_scores/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload ALL metadata gate and completed scientific results without raw licensed files
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phenolicsdb-fourth-source-frozen-cid-result
+          path: |
+            results/phenolicsdb_gate/
+            results/phenolicsdb_scores/
+          if-no-files-found: warn
+          retention-days: 90
