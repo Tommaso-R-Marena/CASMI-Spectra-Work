@@ -93,7 +93,7 @@ def test_alignment_may_be_identity_ambiguous_but_all_unmatched_denominators_pres
     actual,_=optimal_ion_spectra(q,r)
     assert actual["fragment_overlap"]==pytest.approx(.1)
     assert actual["hellinger"]==pytest.approx(.1)
-    assert actual["cosine"]==pytest.approx(.1/math.sqrt(.66))
+    assert actual["cosine"]==pytest.approx(1/math.sqrt(66*82))
 
 
 @pytest.mark.parametrize("q,r",[
