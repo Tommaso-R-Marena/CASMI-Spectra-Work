@@ -1,0 +1,86 @@
+name: posthoc-three-source-oracle-vs-support
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/oracle-vs-support-discrimination-20261016
+    paths:
+      - '.github/workflows/posthoc-three-source-oracle-vs-support.yml'
+      - 'scripts/audit_oracle_vs_support_three_sources.py'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  support-vs-oracle-falsification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify prior scorers and exact frozen spectral interpolation functions unchanged
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin 6c38b731815c19a13b660b86a985ee7387c3b278
+          git diff --exit-code 6c38b731815c19a13b660b86a985ee7387c3b278 -- \
+            scripts/benchmark_multims2_third_source_geometry.py \
+            scripts/benchmark_multims2_third_source_geometry_v2.py \
+            scripts/benchmark_massbank_external_energy_geometry.py \
+            scripts/benchmark_expolib_frozen_nominal_transfer.py \
+            src/qfd/power_geometry.py \
+            src/qfd/target_blind_geometry.py \
+            src/qfd/stats.py
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Reuse only ORIGINAL prediction rows from three immutable successful runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/mb frozen/expo frozen/multi results/three_source_oracle
+          gh run download 38918658343 --repo "$GITHUB_REPOSITORY" \
+            --name massbank-2026-03-frozen-external-efficacy --dir frozen/mb
+          gh run download 38964797817 --repo "$GITHUB_REPOSITORY" \
+            --name expolib-v1-independent-nominal-CE-transfer --dir frozen/expo
+          gh run download 38970610885 --repo "$GITHUB_REPOSITORY" \
+            --name multims2-third-independent-source-frozen-geometry --dir frozen/multi
+          echo '2c973a7b83c1a48f95f923107ee72bb44a2a95f7d7da403f9d662efc8b  frozen/mb/rows.jsonl' | sha256sum -c -
+          echo 'f85b67d61be82f62ee1072944f9d300eb2d1d81462eba6ad221566dfaa276695  frozen/expo/rows.jsonl' | sha256sum -c -
+          echo 'f97bfaee05e9197cdaa96ad995ab9019c995274820ff57f3b04bd04de12c2be6  frozen/multi/rows.jsonl' | sha256sum -c -
+      - name: Compare actual query-aware oracle against nongeometric support-only path
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_oracle_vs_support_three_sources.py \
+            --massbank frozen/mb/rows.jsonl \
+            --expolib frozen/expo/rows.jsonl \
+            --multims2 frozen/multi/rows.jsonl \
+            --out results/three_source_oracle
+          cat results/three_source_oracle/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve purpose and limitations even if computation fails
+        if: always()
+        run: |
+          mkdir -p results/three_source_oracle
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload={
+            "classification":"POSTHOC ANALYSIS OF EXACT ORIGINAL ARTIFACT SCORES; NOT A PROSPECTIVE EXPERIMENT",
+            "original_runs":[38918658343,38964797817,38970610885],
+            "new_spectral_scoring_or_model_training":False,
+            "comparison":"quarter, matched support-only heuristic, and target-aware Hellinger chord oracle",
+            "oracle_deployable":False,
+            "mechanistic_causal_conclusion_allowed":False,
+          }
+          Path("results/three_source_oracle/provenance.json").write_text(json.dumps(payload,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: posthoc-three-source-oracle-vs-support-falsification
+          path: results/three_source_oracle/
+          if-no-files-found: warn
+          retention-days: 90
