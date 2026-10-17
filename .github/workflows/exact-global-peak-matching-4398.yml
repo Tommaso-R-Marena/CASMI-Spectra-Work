@@ -1,0 +1,72 @@
+name: original-4398-global-peak-assignment-falsification
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/exact-peak-assignment-falsification-20261017]
+    paths:
+      - '.github/workflows/exact-global-peak-matching-4398.yml'
+      - 'src/qfd/exact_peak_assignment.py'
+      - 'scripts/audit_exact_peak_assignment_4398.py'
+      - 'tests/test_exact_peak_assignment.py'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  exact-source-anchored-assignment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify all source and mathematical regression tests before data scoring
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Retrieve ORIGINAL independent metadata, separately prescored V2, and original negative test artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/v1 frozen/v2 frozen/firstlook results/global_assignment /tmp/global_assignment
+          test "$(gh run view 39055589643 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          test "$(gh run view 39055988705 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          test "$(gh run view 39056094950 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          gh run download 39055589643 --repo "$GITHUB_REPOSITORY" \
+            --name harmonized2026-cross-provider-native-identity-gate --dir frozen/v1
+          gh run download 39055988705 --repo "$GITHUB_REPOSITORY" \
+            --name harmonized2026-positive-only-prescore-v2-decision --dir frozen/v2
+          gh run download 39056094950 --repo "$GITHUB_REPOSITORY" \
+            --name harmonized2026-independent-firstlook-molecular-ranking --dir frozen/firstlook
+          test -s frozen/v1/hard_queries.jsonl
+          test -s frozen/v1/reference_manifest.jsonl
+          test -s frozen/v1/feasibility.json
+          test -s frozen/v2/feasibility.json
+          test -s frozen/firstlook/results.json
+          test -s frozen/firstlook/query_metrics.jsonl
+      - name: Acquire exact original 190 MB GNPS-MassSpecGym spectrum source
+        run: |
+          set -euxo pipefail
+          curl -Lf --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 3000 \
+            'https://zenodo.org/records/20042904/files/combined-gnps-mass-spec-gym-npc-faithful.harmonized-subset.top128.mgf.zst?download=1' \
+            -o /tmp/global_assignment/source.mgf.zst
+          echo 'aee5a595960ef1284fe9977b6560a1ff771c07bb28c4a8e2e2ef47020b35724e  /tmp/global_assignment/source.mgf.zst' | sha256sum -c -
+      - name: Reproduce original 4398-query 4-method ranks EXACTLY then run label-blind optimal matching
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_exact_peak_assignment_4398.py \
+            --source /tmp/global_assignment/source.mgf.zst \
+            --gate-dir frozen/v1 --positive-v2-dir frozen/v2 \
+            --original-dir frozen/firstlook --out results/global_assignment
+          cat results/global_assignment/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve full method-comparison and all 4398 query results, even negative
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: global-peak-matching-4398-query-full-original-replay
+          path: results/global_assignment/
+          retention-days: 90
+          if-no-files-found: warn
