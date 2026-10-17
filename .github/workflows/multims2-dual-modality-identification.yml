@@ -1,0 +1,93 @@
+name: multims2-dual-modality-isomer-identification
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/multims2-dual-modality-identification-20261017]
+    paths:
+      - '.github/workflows/multims2-dual-modality-identification.yml'
+      - 'scripts/audit_multims2_dual_identification_gate.py'
+      - 'scripts/benchmark_multims2_dual_identification.py'
+      - 'tests/test_multims2_dual_identification.py'
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  metadata-gated-isomer-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run complete existing plus new regression tests
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Retrieve immutable earlier metadata-only manifests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/cid frozen/ead results/dual_isomer_gate
+          test "$(gh run view 38970318925 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          test "$(gh run view 38985767245 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          gh run download 38970318925 --repo "$GITHUB_REPOSITORY" \
+            --name multims2-third-source-metadata-v2-fixed-brackets --dir frozen/cid
+          gh run download 38985767245 --repo "$GITHUB_REPOSITORY" \
+            --name ead-positive-only-v2-prescore-eligibility --dir frozen/ead
+          echo '5345f532ded9baa4134d38b840a6e05a1b1f85b3cf19923569ea80d96f46289d  frozen/cid/frozen_triplets.jsonl' | sha256sum -c -
+      - name: Freeze purely metadata-selected exact-formula isomer candidate pools
+        id: gate
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_multims2_dual_identification_gate.py \
+            --cid-manifest frozen/cid/frozen_triplets.jsonl \
+            --ead-manifest frozen/ead/frozen_triplets.jsonl \
+            --ead-gate frozen/ead/feasibility.json \
+            --out results/dual_isomer_gate
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=json.loads(Path('results/dual_isomer_gate/feasibility.json').read_text())
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write('passed=' + str(p['gate_pass']).lower() + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+              out.write('## Metadata-only same-formula isomer feasibility\n\n')
+              out.write(f"Groups: **{p['coverage']['same_formula_isomer_groups']}**, "
+                        f"queries: **{p['coverage']['eligible_isomer_queries']}**; "
+                        f"scientific gate: **{'PASS' if p['gate_pass'] else 'FAIL'}**.\n\n")
+              if not p['gate_pass']:
+                  out.write('FAIL CLOSED: target spectra will NOT be opened or scored.\n')
+          PY
+      - name: Verify identical independently published 77MB raw source
+        if: steps.gate.outputs.passed == 'true'
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/multims2_dual
+          curl -L --fail --retry 6 --retry-all-errors --retry-delay 4 --connect-timeout 30 --max-time 2400 \
+            'https://raw.githubusercontent.com/zamboni-lab/MultiMS2/659bd9b608408a75ecbb4b03295ed4c03ba52539/data/multims2_spectra.mgf' \
+            -o /tmp/multims2_dual/source.mgf
+          test "$(stat -c '%s' /tmp/multims2_dual/source.mgf)" = 77183510
+          echo '4ef86f75a12ad2fdadbd63732e2d6690f4e506a6ff08f171758c1808d1249673  /tmp/multims2_dual/source.mgf' | sha256sum -c -
+      - name: Score every eligible isomer, all same-formula competitors, with CID and EAD
+        if: steps.gate.outputs.passed == 'true'
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/benchmark_multims2_dual_identification.py \
+            --mgf /tmp/multims2_dual/source.mgf \
+            --gate-dir results/dual_isomer_gate \
+            --out results/dual_isomer_scores
+          cat results/dual_isomer_scores/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve metadata gate and optional completed score artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: multims2-dual-isomer-identification-exploratory
+          path: |
+            results/dual_isomer_gate/
+            results/dual_isomer_scores/
+          retention-days: 90
+          if-no-files-found: warn
