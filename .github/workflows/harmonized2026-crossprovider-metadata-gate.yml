@@ -1,0 +1,64 @@
+name: harmonized2026-crossprovider-native-identity-gate
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/gnps-massspecgym-cross-library-lockbox-20261017]
+    paths:
+      - '.github/workflows/harmonized2026-crossprovider-metadata-gate.yml'
+      - 'scripts/audit_harmonized2026_crossprovider_gate.py'
+      - 'tests/test_harmonized2026_crossprovider_gate.py'
+permissions:
+  contents: read
+jobs:
+  no-peaks-first-look-cross-library:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run all regression tests including native identity and source selection
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]' zstandard
+          PYTHONPATH=src:. pytest -q
+      - name: Download exact historically pinned May-2026 190MB annotated data
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/gnps_msg results/gnps_msg_metadata
+          curl -Lf --retry 6 --retry-all-errors --retry-delay 4 \
+            --connect-timeout 30 --max-time 3000 \
+            'https://zenodo.org/records/20042904/files/combined-gnps-mass-spec-gym-npc-faithful.harmonized-subset.top128.mgf.zst?download=1' \
+            -o /tmp/gnps_msg/labelled.mgf.zst
+          echo 'e2b792e384a9c9f577b17daad6c4247d  /tmp/gnps_msg/labelled.mgf.zst' | md5sum -c -
+          echo 'aee5a595960ef1284fe9977b6560a1ff771c07bb28c4a8e2e2ef47020b35724e  /tmp/gnps_msg/labelled.mgf.zst' | sha256sum -c -
+      - name: Scan ALL 443905 headers only; freeze query versus candidate populations
+        id: gate
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/audit_harmonized2026_crossprovider_gate.py \
+            --zst /tmp/gnps_msg/labelled.mgf.zst \
+            --out results/gnps_msg_metadata
+          python - <<'PY'
+          from pathlib import Path
+          import os,json
+          j=json.loads(Path('results/gnps_msg_metadata/feasibility.json').read_text())
+          c=j['coverage']
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('passed='+str(j['gate_pass']).lower()+'\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('## 2026 GNPS/MassSpecGym original-source metadata-only gate\n\n')
+              f.write(f"**Scientifically {'PASS' if j['gate_pass'] else 'FAIL'}**\n\n")
+              for k,v in c.items():f.write(f"- {k}: {v}\n")
+              f.write('\n**0 spectral fragment peaks opened or scored.**\n')
+              if not j['gate_pass']:f.write('NO subsequent scoring authorized.\n')
+          PY
+      - name: Preserve all metadata + negative outcomes (NOT compressed licensed source)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: harmonized2026-cross-provider-native-identity-gate
+          path: results/gnps_msg_metadata/
+          retention-days: 90
+          if-no-files-found: warn
