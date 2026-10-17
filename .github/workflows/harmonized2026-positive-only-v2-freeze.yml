@@ -1,0 +1,60 @@
+name: harmonized2026-positive-only-v2-prescore-freeze
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/gnps-massspecgym-cross-library-lockbox-20261017]
+    paths:
+      - '.github/workflows/harmonized2026-positive-only-v2-freeze.yml'
+      - 'scripts/freeze_harmonized2026_positive_only_v2.py'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  positive-only-metadata-before-outcome:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install and run all source identity regressions
+        run: |
+          set -euxo pipefail
+          python -m pip install -e '.[dev]'
+          PYTHONPATH=src:. pytest -q
+      - name: Acquire exact ORIGINAL SCIENTIFICALLY FAILED metadata V1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p frozen/original_v1 results/positive_v2
+          test "$(gh run view 39055589643 --repo "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success
+          gh run download 39055589643 --repo "$GITHUB_REPOSITORY" \
+            --name harmonized2026-cross-provider-native-identity-gate --dir frozen/original_v1
+          test -s frozen/original_v1/feasibility.json
+          test -s frozen/original_v1/hard_queries.jsonl
+          test -s frozen/original_v1/reference_manifest.jsonl
+      - name: Version all 4398 native-positive queries, preserving V1 failed gate and ALL exclusions
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=src:. python scripts/freeze_harmonized2026_positive_only_v2.py \
+            --v1-dir frozen/original_v1 --out results/positive_v2
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          j=json.loads(Path('results/positive_v2/feasibility.json').read_text())
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('## Frozen original V1 failed; separately versioned positive-only V2\n\n')
+              f.write(f"V2 metadata gate: **{'PASS' if j['gate_pass'] else 'FAIL'}**\n")
+              for k,v in j['coverage'].items():f.write(f"- {k}: {v}\n")
+              f.write('Original all-polarity failure untouched; no source peak intensities opened.\n')
+          PY
+      - name: Preserve V2 decision (never spectra nor manually selected query subset)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harmonized2026-positive-only-prescore-v2-decision
+          path: results/positive_v2/
+          if-no-files-found: warn
+          retention-days: 90
