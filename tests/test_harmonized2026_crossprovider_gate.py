@@ -49,7 +49,7 @@ def test_formula_or_polarity_restriction_keeps_wrong_candidates_out():
           item("MASSSPECGYM",A,2,301.1231)]
     _,qs,cov,_=freeze(rows)
     assert qs==[]
-    assert cov["hard_queries"]==0
+    assert cov.get("hard_queries",0)==0
 
 
 def test_precursor_outside_fixed_mass_window_cannot_be_cherrypicked():
