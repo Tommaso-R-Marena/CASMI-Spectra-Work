@@ -1,0 +1,5 @@
+AUTHORIZE FROZEN POSITIVE-ION EAD TARGET SCORING AFTER V2 PRE-SCORE GATE PASSED
+Original V1 two-polarity gate failed: 694 positive, 1 negative; negative outcome retained.
+V2 metadata-only gate run 38985767245 succeeded; gate_pass=true, eligible positive population 694, 666 structures, 593 formula blocks, zero EAD target peak intensities read.
+Frozen model, source selection, scoring method, comparator set, paired statistical tests were committed before this launch at 4295a1ae7ead5f56a0d5b57a772cd651032d1362 and positive-only cohort at d7130e3d6a3d72ef01387fd6262ac43afa618d7c.
+No new data-dependent tuning or selection is authorized.
